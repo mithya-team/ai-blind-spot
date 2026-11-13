@@ -1,0 +1,1331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Deep Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/common.css?v=13">
+<style>
+  :root {
+    --bg: #071521; --fg: #e3f6ff; --accent: #7fe3ff; --on-accent: #04121c;
+    --card: rgba(6, 20, 32, .84); --line: rgba(127, 227, 255, .22); --chip: rgba(127, 227, 255, .07);
+    --input: rgba(255, 255, 255, .05); --scrim: rgba(2, 8, 14, .4); --shadow: 0 24px 70px rgba(0, 0, 0, .6);
+    --font-display: Inter, -apple-system, sans-serif; --display-weight: 700; --font-ui: Inter, -apple-system, sans-serif;
+    --display-tracking: -.025em; --demo-bg: #0b2233;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shared/common.js?v=13"></script>
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  /* The world is measured internally on a "year" axis (a leftover unit: one year = YEAR_PX of fall). The player
+     only ever sees depth: 100 m per internal year, so the surface is 0 m, the layers start at
+     0 / 1,100 / 2,100 / 3,100 / 4,100 / 5,100 m and the bottom is 6,200 m. */
+  const START_YEAR = 2026, END_YEAR = 1964, YEAR_PX = 620;
+  const TOTAL = (START_YEAR - END_YEAR) * YEAR_PX;
+  const M_PER_YEAR = 100, BOTTOM_M = (START_YEAR - END_YEAR) * M_PER_YEAR;
+  const metres = y => (START_YEAR - y) * M_PER_YEAR; // internal year -> shown depth
+  const yearOf = m => START_YEAR - m / M_PER_YEAR;   // shown depth -> internal year
+  const commas = n => n < 1000 ? String(n) : Math.floor(n / 1000) + ',' + String(n % 1000).padStart(3, '0');
+  const fmtM = m => commas(Math.floor(m)) + ' m';
+  // each layer is its own stratum: bg/deep tint the water, dark tints the shadows, acc is its light
+  const LAYERS = [
+    { from: 2026, name: 'Cloud apps', style: 'glass', bg: [20, 94, 138], deep: [9, 44, 76], dark: [2, 13, 26], acc: [127, 227, 255] },
+    { from: 2015, name: 'Shared drives', style: 'folder', bg: [22, 90, 92], deep: [10, 44, 50], dark: [3, 15, 19], acc: [255, 208, 116] },
+    { from: 2005, name: 'Email archives', style: 'mail', bg: [50, 55, 140], deep: [23, 25, 76], dark: [8, 9, 30], acc: [178, 190, 255] },
+    { from: 1995, name: 'Legacy applications', style: 'box', bg: [26, 82, 68], deep: [12, 40, 36], dark: [3, 14, 13], acc: [134, 240, 170] },
+    { from: 1985, name: 'Core systems', style: 'frame', bg: [80, 50, 88], deep: [36, 22, 42], dark: [12, 6, 16], acc: [255, 132, 156] },
+    { from: 1975, name: 'Offline archives', style: 'cabinet', bg: [102, 70, 40], deep: [48, 32, 18], dark: [16, 10, 5], acc: [255, 218, 158] },
+  ];
+  const NL = LAYERS.length;
+  for (const e of LAYERS) {
+    e.pool = e.bg.map(v => Math.min(255, v * 2.3 + 24)); // what the lantern's pool lights the water to
+    e.lit = e.bg.map((v, k) => v * .5 + e.pool[k] * .5); // the layer with the lights on
+  }
+  const WHITE = [255, 255, 255], COOL = [120, 218, 255], WARM = [255, 122, 72];
+  const C_PICK = [158, 234, 255], C_HIT = [255, 143, 122];
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const mod = (a, n) => ((a % n) + n) % n;
+  const hash = n => mod(Math.sin(n * 12.9898) * 43758.5453, 1);
+  const yearAt = d => START_YEAR - d / YEAR_PX;
+  const layerIdx = y => { for (let i = NL - 1; i >= 0; i--) if (y <= LAYERS[i].from) return i; return 0; };
+  const RM = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const FX = RM ? .3 : 1; // shake and flashes are toned down for reduced motion
+  const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+  let ctx, W, H, PY, PR = 11, SAFE_B = 0, SAFE_T = 0;
+  let depth = 0, px = 0, tx = 0, light = 100, inv = 0, shake = 0, frags = 0, hits = 0, bonus = 0, warnT = 0;
+  let running = false, over = false, won = false, clock = 0, runTime = 0, lightsOn = 0;
+  let rows = [], items = [], trailPts = [], parts = [], pops = [], banner = null, nextY = 0, lastGapC = 0, layerNow = 0;
+  // purely visual state
+  let sparks = [], flies = [], sparkAcc = 0, vel = 0, hitFx = null, gotFx = 0, layerFx = 0, outFx = 0;
+  let drag = null;
+  // ?from=3000 starts the dive 3,000 m down (test hook)
+  const startDepth = clamp(+BS.params.get('from') || 0, 0, BOTTOM_M - M_PER_YEAR) / M_PER_YEAR * YEAR_PX;
+
+  // reads the safe-area insets so the HUD clears the notch and bottom text clears the shell's mode pill
+  const safeEl = document.createElement('div');
+  safeEl.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;padding-bottom:env(safe-area-inset-bottom);padding-top:env(safe-area-inset-top);visibility:hidden;pointer-events:none';
+  document.body.append(safeEl);
+
+  function resize() {
+    ({ ctx, w: W, h: H } = BS.fit(cv));
+    const cs = getComputedStyle(safeEl);
+    SAFE_B = parseFloat(cs.paddingBottom) || 0; SAFE_T = parseFloat(cs.paddingTop) || 0;
+    PY = H * .3;
+    if (!running) { px = tx = W / 2; }
+    px = clamp(px, PR, W - PR); tx = clamp(tx, PR, W - PR);
+  }
+
+  // ---------- world generation ----------
+  function genRow() {
+    const p = nextY / TOTAL;
+    const layer = layerIdx(yearAt(nextY));
+    const h = rand(30, 40);
+    const gapW = Math.max(PR * 8, W * lerp(.5, .3, p));
+    const row = { y: nextY, h, layer, blocks: [] };
+    if (Math.random() < .62) {
+      const c = clamp(lastGapC + rand(-1, 1) * W * .38, gapW / 2 + 8, W - gapW / 2 - 8);
+      lastGapC = c;
+      if (c - gapW / 2 > 6) row.blocks.push({ x: 0, w: c - gapW / 2 });
+      if (W - (c + gapW / 2) > 6) row.blocks.push({ x: c + gapW / 2, w: W - (c + gapW / 2) });
+      if (Math.random() < .55) items.push({ x: c, y: nextY + h / 2, ph: rand(0, 6) });
+    } else {
+      const bw = W * rand(.22, .42), bx = rand(0, W - bw);
+      row.blocks.push({ x: bx, w: bw });
+      const fx = bx > W / 2 ? rand(24, bx - 20) : rand(bx + bw + 20, W - 24);
+      if (Math.random() < .7) items.push({ x: clamp(fx, 24, W - 24), y: nextY + h / 2, ph: rand(0, 6) });
+    }
+    rows.push(row);
+    const gap = lerp(250, 178, p) + rand(0, 40);
+    if (Math.random() < .5) items.push({ x: rand(30, W - 30), y: nextY + h + gap / 2, ph: rand(0, 6) });
+    nextY += gap;
+  }
+  function genUntil(limit) { while (nextY < limit && nextY < TOTAL - 320) genRow(); }
+
+  // ---------- input: relative steering, finger anywhere ----------
+  cv.addEventListener('pointerdown', e => {
+    drag = { id: e.pointerId, sx: e.clientX, t0: tx };
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    tx = clamp(drag.t0 + (e.clientX - drag.sx) * 1.3, PR + 2, W - PR - 2);
+  });
+  const up = e => { if (drag && e.pointerId === drag.id) drag = null; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') tx = clamp(tx - 44, PR, W - PR);
+    if (e.key === 'ArrowRight') tx = clamp(tx + 44, PR, W - PR);
+  });
+
+  // ---------- flow ----------
+  const layerKick = e => `Layer ${e + 1} of ${NL}`;
+  function start() {
+    depth = startDepth; light = 100; inv = 0; shake = 0; frags = 0; hits = 0; bonus = 0; runTime = 0; lightsOn = 0; warnT = 0;
+    rows = []; items = []; parts = []; pops = []; trailPts = []; banner = null;
+    sparks = []; flies = []; sparkAcc = 0; hitFx = null; gotFx = 0; layerFx = 0; outFx = 0;
+    nextY = depth + H * .95; lastGapC = W / 2; px = tx = W / 2;
+    layerNow = layerIdx(yearAt(depth + PY));
+    over = false; won = false; running = true;
+    genUntil(depth + H * 1.6);
+    banner = { m: startDepth / YEAR_PX * M_PER_YEAR, sub: LAYERS[layerNow].name, kick: layerKick(layerNow), life: 2.2, max: 2.2 };
+  }
+  const depthM = () => Math.min(BOTTOM_M, (depth + PY) / YEAR_PX * M_PER_YEAR); // how deep the light is, in metres
+  const totalScore = () => Math.floor((depth - startDepth) / YEAR_PX * 100) + frags * 25 + bonus;
+  function finish() {
+    const layerName = LAYERS[layerNow].name; // the deepest layer reached
+    let theme;
+    if (won) theme = `Lights on, all the way down. ${BS.pl(frags, 'document')} recovered.`;
+    else if (hits >= 3 && hits > frags) theme = `Your AI can see down to ${layerName}. Legacy walls kept everything deeper in the dark.`;
+    else theme = `Your AI can see down to ${layerName}. Everything deeper is a blind spot.`;
+    BS.finish({
+      score: totalScore(),
+      headline: won ? 'All the way down' : 'Your AI went dark',
+      theme,
+      stats: { depth: Math.floor(depthM()), layers: layerNow + 1, layerName, docs: frags, hits },
+      win: won,
+    });
+  }
+  function endDark() {
+    running = false; over = true;
+    banner = { m: depthM(), sub: 'Your AI went dark here', life: 2.6, max: 2.6 };
+    setTimeout(finish, 1300);
+  }
+  function endWin() {
+    running = false; over = true; won = true;
+    bonus = 1000 + Math.round(light * 10);
+    banner = { m: BOTTOM_M, sub: 'Lights on, all the way down', life: 3, max: 3 };
+    parts = [];
+    for (let i = 0; i < 84; i++) burst(px, PY, 1, LAYERS[i % NL].acc, 420); // every layer's colour, set free
+    setTimeout(finish, 3000); // the lights-on sweep runs for 1.5 s, then holds so the player can take it in
+  }
+
+  function hit() {
+    if (inv > 0) return;
+    light -= 26; inv = 1.1; shake = .35; hits++;
+    burst(px, PY, 14, C_HIT, 200);
+    pop(px, PY - 46, '−light', 15, '#ffab98');
+    hitFx = { x: px, y: PY, t: 0 };
+    BS.sfx('hit');
+    BS.vibrate(60);
+  }
+  function burst(x, y, n, col, sp) {
+    for (let i = 0; i < n && parts.length < 92; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(.3, 1) * sp;
+      parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(.4, .9), max: .9, size: rand(1, 2.6), col });
+    }
+  }
+  function pop(x, y, text, size, color) { pops.push({ x: clamp(x, 60, W - 60), y, text, size, color, life: 1, max: 1 }); }
+
+  function update(dt) {
+    clock += dt;
+    shake = Math.max(0, shake - dt); inv = Math.max(0, inv - dt);
+    px += (tx - px) * Math.min(1, dt * 14);
+    const pAbs = depth / TOTAL;
+    const v = running ? lerp(165, 340, pAbs) : (over ? 0 : 18);
+    vel = v;
+    if (running) {
+      runTime += dt;
+      depth += v * dt;
+      genUntil(depth + H * 1.6);
+      light -= (2.4 + 3.4 * pAbs) * dt;
+      const wy = depth + PY;
+      for (const r of rows) {
+        if (r.y > wy + 50) break;
+        if (r.y + r.h < wy - 50) continue;
+        for (const b of r.blocks) {
+          const cx = clamp(px, b.x, b.x + b.w), cy = clamp(wy, r.y, r.y + r.h);
+          if (Math.hypot(px - cx, wy - cy) < PR) hit();
+        }
+      }
+      for (const it of items) {
+        if (it.taken || Math.abs(it.y - wy) > 40) continue;
+        if (Math.hypot(it.x - px, it.y - wy) < PR + 17) {
+          it.taken = true; frags++; light = Math.min(100, light + 15);
+          burst(it.x, it.y - depth, 10, C_PICK, 120);
+          pop(it.x, PY - 46, '+light', 14, '#d4f6ff');
+          flies.push({ dx: it.x - px, dy: it.y - wy, k: 0 }); gotFx = 1; // the page spirals into the lantern
+          BS.sfx('pickup', { n: frags });
+          BS.vibrate(8);
+        }
+      }
+      const e = layerIdx(yearAt(wy));
+      if (e !== layerNow) { layerNow = e; layerFx = 1; banner = { m: metres(LAYERS[e].from), sub: LAYERS[e].name, kick: layerKick(e), life: 2.2, max: 2.2 }; BS.sfx('era'); }
+      if (light < 25) { warnT -= dt; if (warnT <= 0) { BS.sfx('warn'); warnT = 1; } } else warnT = 0;
+      if (light <= 0) { light = 0; endDark(); }
+      else if (depth + PY >= TOTAL) endWin();
+    }
+    if (won) lightsOn = Math.min(1, lightsOn + dt / 1.5);
+    rows = rows.filter(r => r.y + r.h > depth - 60);
+    items = items.filter(it => it.y > depth - 60 && !it.taken);
+    trailPts.unshift({ x: px, y: depth + PY }); if (trailPts.length > 22) trailPts.pop();
+    for (const q of parts) { q.life -= dt; q.vx *= .95; q.vy *= .95; q.x += q.vx * dt; q.y += q.vy * dt; }
+    parts = parts.filter(q => q.life > 0);
+    for (const q of pops) { q.life -= dt; q.y -= 24 * dt; }
+    pops = pops.filter(q => q.life > 0);
+    if (banner) { banner.life -= dt; if (banner.life <= 0) banner = null; }
+    // visual-only: sparks shed by the lantern, pages flying in, effect timers
+    if (running) {
+      sparkAcc += dt * (RM ? 14 : 34);
+      while (sparkAcc >= 1) {
+        sparkAcc--;
+        if (sparks.length < 56) sparks.push({ x: px + rand(-5, 5), y: depth + PY + rand(-5, 3), vx: rand(-15, 15), vy: rand(-26, 12), life: 0, max: rand(.35, .85), s: rand(.8, 2.1) });
+      }
+    }
+    for (const q of sparks) { q.life += dt; q.x += q.vx * dt; q.y += q.vy * dt; }
+    sparks = sparks.filter(q => q.life < q.max);
+    for (const f of flies) f.k += dt / .36;
+    flies = flies.filter(f => f.k < 1);
+    if (hitFx) { hitFx.t += dt; if (hitFx.t > .6) hitFx = null; }
+    gotFx = Math.max(0, gotFx - dt / .6); layerFx = Math.max(0, layerFx - dt / 1.1);
+    if (over && !won) outFx = Math.min(1, outFx + dt / 1.1);
+  }
+
+  // ---------- drawing (shared by the game and the tutorial demos; every helper takes its context) ----------
+  const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const TRK = new Map(); // tracked caps: thin spaces between letters
+  const trk = s => { let v = TRK.get(s); if (!v) TRK.set(s, v = s.toUpperCase().split('').join('\u200A')); return v; };
+  function mkCanvas(w, h, sc = DPR) {
+    const el = document.createElement('canvas');
+    el.width = Math.ceil(w * sc); el.height = Math.ceil(h * sc);
+    const g = el.getContext('2d'); g.scale(sc, sc);
+    return { cv: el, g };
+  }
+  const lin = (g, y0, y1, ...st) => { const lg = g.createLinearGradient(0, y0, 0, y1); for (let i = 0; i < st.length; i += 2) lg.addColorStop(st[i], st[i + 1]); return lg; };
+  // the layer(s) a point on the internal axis sits in: [above, below, blend], blending across a narrow band at each boundary
+  function layerMix(year, bw) {
+    const i = layerIdx(year);
+    if (i < NL - 1 && year < LAYERS[i + 1].from + bw) return [i, i + 1, (LAYERS[i + 1].from + bw - year) / (2 * bw)];
+    if (i > 0 && year > LAYERS[i].from - bw) return [i - 1, i, (LAYERS[i].from + bw - year) / (2 * bw)];
+    return [i, i, 0];
+  }
+  const layerCol = (key, year, bw) => { const [a, b, t] = layerMix(year, bw); return a === b ? LAYERS[a][key] : mixc(LAYERS[a][key], LAYERS[b][key], clamp(t, 0, 1)); };
+
+  // pre-rendered glows. Only ever called with the constant palette arrays above, so the cache stays small.
+  function glow(col, hard) {
+    const k = hard ? '_gh' : '_gs';
+    if (col[k]) return col[k];
+    const S = mkCanvas(96, 96, 1), g = S.g, rg = g.createRadialGradient(48, 48, 0, 48, 48, 48);
+    if (hard) {
+      rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(.14, rgb(mixc(col, WHITE, .6), .95));
+      rg.addColorStop(.38, rgb(col, .42)); rg.addColorStop(.68, rgb(col, .1)); rg.addColorStop(1, rgb(col, 0));
+    } else {
+      rg.addColorStop(0, rgb(col, .6)); rg.addColorStop(.3, rgb(col, .36)); rg.addColorStop(.62, rgb(col, .11)); rg.addColorStop(1, rgb(col, 0));
+    }
+    g.fillStyle = rg; g.fillRect(0, 0, 96, 96);
+    return col[k] = S.cv;
+  }
+  const spot = (c, spr, x, y, rx, ry = rx) => c.drawImage(spr, x - rx, y - ry, rx * 2, ry * 2);
+
+  /* --- backdrop: layer-tinted water, a faint texture per stratum, light shafts from above, the lantern's pool ---
+     These are all gradients and faint lines, so they are painted into a half-resolution canvas and scaled up in one
+     opaque blit: a quarter of the fill cost, and the slight softness reads as depth. */
+  const BQ = Math.max(.75, DPR / 2), backs = new Map();
+  function backdrop(w, h) {
+    const key = Math.round(w) + 'x' + Math.round(h);
+    let b = backs.get(key);
+    if (!b) {
+      if (backs.size > 2) backs.clear(); // game + one tutorial demo; anything else is a stale size
+      const el = document.createElement('canvas');
+      el.width = Math.ceil(w * BQ); el.height = Math.ceil(h * BQ);
+      backs.set(key, b = { cv: el, g: el.getContext('2d', { alpha: false }) });
+    }
+    b.g.setTransform(b.cv.width / w, 0, 0, b.cv.height / h, 0, 0);
+    return b;
+  }
+  function drawBackground(c, w, h, yTop, yBot, ypx, bw, tint, dark) {
+    const span = yTop - yBot, g = c.createLinearGradient(0, 0, 0, h);
+    const stop = yr => { const p = clamp((yTop - yr) / span, 0, 1); g.addColorStop(p, rgb(mixc(mixc(layerCol('bg', yr, bw), layerCol('deep', yr, bw), .12 + p * .7), tint, dark))); };
+    stop(yTop); stop(yBot);
+    for (let i = 1; i < NL; i++) {
+      const hi = LAYERS[i].from + bw, lo = LAYERS[i].from - bw;
+      if (hi < yTop && hi > yBot) stop(hi);
+      if (lo < yTop && lo > yBot) stop(lo);
+    }
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+  }
+  const TILE = 256, tiles = [];
+  const PATTERN = {
+    glass(g) { // nodes and links
+      const pts = [[32, 40], [112, 24], [200, 56], [64, 120], [152, 104], [232, 152], [40, 200], [120, 184], [208, 224]];
+      g.globalAlpha = .55; g.beginPath();
+      for (const [a, b] of [[0, 1], [1, 2], [0, 3], [3, 4], [1, 4], [4, 5], [3, 6], [6, 7], [4, 7], [7, 8], [5, 8]]) { g.moveTo(pts[a][0], pts[a][1]); g.lineTo(pts[b][0], pts[b][1]); }
+      g.stroke(); g.globalAlpha = 1;
+      for (const [x, y] of pts) { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); g.globalAlpha = .4; g.beginPath(); g.arc(x, y, 8, 0, 7); g.stroke(); g.globalAlpha = 1; }
+    },
+    folder(g) { // directory trees
+      for (const ox of [24, 152]) {
+        g.globalAlpha = .6; g.beginPath(); g.moveTo(ox, 0); g.lineTo(ox, TILE);
+        for (let y = 32, k = 0; y < TILE; y += 64, k++) { const ix = ox + 22 + (k % 2) * 18; g.moveTo(ox, y); g.lineTo(ix, y); }
+        g.stroke(); g.globalAlpha = 1;
+        for (let y = 32, k = 0; y < TILE; y += 64, k++) {
+          const ix = ox + 26 + (k % 2) * 18;
+          g.beginPath(); g.moveTo(ix, y - 7); g.lineTo(ix + 8, y - 7); g.lineTo(ix + 11, y - 4); g.lineTo(ix + 24, y - 4); g.lineTo(ix + 24, y + 8); g.lineTo(ix, y + 8); g.closePath(); g.stroke();
+          g.globalAlpha = .5; g.fillRect(ix + 30, y - 1, 26 + (k % 3) * 10, 2); g.globalAlpha = 1;
+        }
+      }
+    },
+    mail(g) { // postmarks: rings and wavy cancel lines
+      g.font = '500 15px Inter, sans-serif'; g.textBaseline = 'middle';
+      for (const [x, y] of [[50, 58], [178, 186]]) {
+        g.beginPath(); g.arc(x, y, 22, 0, 7); g.stroke();
+        g.globalAlpha = .55; g.beginPath(); g.arc(x, y, 16, 0, 7); g.stroke();
+        for (let k = 0; k < 4; k++) {
+          g.beginPath();
+          for (let i = 0; i <= 60; i += 4) { const xx = x + 26 + i, yy = y - 12 + k * 8 + Math.sin(i / 5) * 2.5; i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }
+          g.stroke();
+        }
+        g.fillText('@', x + 96 - (x > 100 ? 220 : 0), y + 64); g.globalAlpha = 1;
+      }
+    },
+    box(g) { // terminal lines and prompts
+      g.font = '500 11px Inter, sans-serif'; g.textBaseline = 'middle';
+      for (let r = 0; r < 8; r++) {
+        const y = 16 + r * 32, x = 14 + (r % 3) * 26;
+        g.fillText('>', x, y);
+        g.globalAlpha = .55; let cx = x + 14;
+        for (let k = 0; k < 4; k++) { const ww = 12 + hash(r * 7 + k) * 34; g.fillRect(cx, y - 1, ww, 2); cx += ww + 8; }
+        g.globalAlpha = 1; if (r % 2) g.fillRect(cx, y - 5, 6, 10);
+      }
+    },
+    frame(g) { // punched cards
+      for (let cI = 0; cI < 2; cI++) {
+        const x = 18, y = 16 + cI * 128;
+        for (let r = 0; r < 8; r++) for (let q = 0; q < 26; q++) if (hash(cI * 300 + r * 31 + q * 7) > .68) g.fillRect(x + 9 + q * 8, y + 10 + r * 10.4, 3.4, 6.6);
+      }
+    },
+    cabinet(g) { // ruled ledger paper
+      g.globalAlpha = .55; for (let y = 8; y < TILE; y += 16) g.fillRect(0, y, TILE, 1);
+      g.globalAlpha = .8; g.fillRect(40, 0, 1, TILE); g.fillRect(44, 0, 1, TILE); g.fillRect(200, 0, 1, TILE);
+      g.globalAlpha = .7;
+      for (let r = 0; r < 16; r++) if (hash(r * 5.3) > .35) { g.fillRect(54, r * 16 + 2, 30 + hash(r * 9.1) * 100, 2.2); g.fillRect(208, r * 16 + 2, 12 + hash(r * 3.7) * 26, 2.2); }
+    },
+  };
+  function tileFor(i) {
+    if (tiles[i]) return tiles[i];
+    const S = mkCanvas(TILE, TILE, BQ), g = S.g;
+    g.strokeStyle = g.fillStyle = rgb(mixc(LAYERS[i].acc, WHITE, .3)); g.lineWidth = 1.3; g.lineJoin = 'round';
+    PATTERN[LAYERS[i].style](g);
+    return tiles[i] = S.cv;
+  }
+  function drawPattern(c, w, h, d, yTop, ypx, a) {
+    const off = mod(d * .55, TILE);
+    for (let i = 0; i < NL; i++) {
+      const y0 = i ? Math.max(0, (yTop - LAYERS[i].from) * ypx) : 0;
+      const y1 = i + 1 < NL ? Math.min(h, (yTop - LAYERS[i + 1].from) * ypx) : h;
+      if (y1 <= y0) continue;
+      const img = tileFor(i), part = y0 > 0 || y1 < h; // only clip where two strata share the screen
+      c.save(); c.globalAlpha = a;
+      if (part) { c.beginPath(); c.rect(0, y0, w, y1 - y0); c.clip(); }
+      for (let ty = -off; ty < y1; ty += TILE) { if (ty + TILE < y0) continue; for (let x = 0; x < w; x += TILE) c.drawImage(img, x, ty, TILE, TILE); }
+      c.restore();
+    }
+  }
+  let shaftSpr = null;
+  function shafts() {
+    if (shaftSpr) return shaftSpr;
+    const S = mkCanvas(256, 512, 1), g = S.g; // all soft gradients, so low resolution is plenty
+    for (const [x, bw, tilt, a] of [[34, 40, .13, .5], [96, 70, .05, .34], [158, 30, -.02, .55], [214, 56, -.1, .4]]) {
+      g.save(); g.translate(x, -30); g.rotate(tilt);
+      const lg = g.createLinearGradient(-bw / 2, 0, bw / 2, 0);
+      lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(.5, `rgba(255,255,255,${a})`); lg.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = lg; g.fillRect(-bw / 2, 0, bw, 640); g.restore();
+    }
+    g.globalCompositeOperation = 'destination-in';
+    g.fillStyle = lin(g, 0, 512, 0, 'rgba(0,0,0,1)', .5, 'rgba(0,0,0,.5)', 1, 'rgba(0,0,0,0)'); g.fillRect(0, 0, 256, 512);
+    return shaftSpr = S.cv;
+  }
+  function drawShafts(c, w, h, t, k) {
+    c.save(); c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = k * (.85 + .15 * Math.sin(t * .6));
+    c.drawImage(shafts(), -w * .1 + (RM ? 0 : Math.sin(t * .17) * w * .05), -8, w * 1.2, h * .86);
+    c.restore();
+  }
+  // strata give a sense of falling
+  function drawStrata(c, w, h, d, col, k) {
+    c.lineWidth = 1;
+    for (let wy = Math.floor(d / 90) * 90; wy < d + h + 10; wy += 90) {
+      const y = wy - d, bold = mod(Math.round(wy / 90), 5) === 0;
+      c.strokeStyle = rgb(col, (bold ? .16 : .07) * k); c.beginPath();
+      for (let x = 0; x <= w + 24; x += 24) { const yy = y + Math.sin(x / 70 + wy / 300) * 5; x ? c.lineTo(x, yy) : c.moveTo(x, yy); }
+      c.stroke();
+    }
+  }
+  // motes in three parallax layers; they stretch into streaks as the fall speeds up
+  const MOTES = Array.from({ length: 74 }, (_, i) => {
+    const z = i < 36 ? 0 : i < 66 ? 1 : 2;
+    return { x: Math.random(), y: Math.random(), z, ph: rand(0, 6.28), s: [rand(.7, 1.2), rand(1.1, 2), rand(2.4, 4.4)][z], sp: [rand(.12, .3), rand(.42, .78), rand(1.15, 1.5)][z] };
+  });
+  function drawMotes(c, w, h, t, dist, v, col, near, k) {
+    const H2 = h + 80, soft = near && glow(WHITE);
+    c.fillStyle = col;
+    for (const m of MOTES) {
+      if ((m.z === 2) !== near) continue;
+      const y = mod(m.y * H2 - dist * m.sp - t * (5 + 8 * m.sp), H2) - 40;
+      const x = m.x * w + Math.sin(t * .45 + m.ph) * (3 + 5 * m.z);
+      const len = clamp(v * m.sp * .05, m.s, 36), tw = .62 + .38 * Math.sin(t * 1.3 + m.ph * 3);
+      if (near) { c.globalAlpha = .1 * tw * k; c.drawImage(soft, x - m.s * 3, y - m.s * 3, m.s * 6, m.s * 6 + len * 1.6); }
+      else { c.globalAlpha = (m.z ? .4 : .24) * tw * k; c.fillRect(x, y, m.s, len); }
+    }
+    c.globalAlpha = 1;
+  }
+  // depth lines scroll with the world on the left edge, a labelled one every 100 m (every 500 m when zoomed out)
+  function drawRuler(c, w, h, d, ypx, minY, col) {
+    const mpx = ypx / M_PER_YEAR, major = ypx >= 200 ? 100 : 500, minor = ypx >= 200 ? 25 : 100;
+    const mTop = Math.max(0, d / mpx), mBot = Math.min(BOTTOM_M, (d + h) / mpx);
+    c.font = '500 9px Inter, sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'left';
+    for (let m = Math.ceil(mTop / minor) * minor; m <= mBot; m += minor) {
+      const y = m * mpx - d;
+      if (y < minY) continue;
+      const big = m % major === 0;
+      c.fillStyle = rgb(col, big ? .6 : .26); c.fillRect(0, y - .5, big ? 12 : 6, 1);
+      if (big) {
+        c.fillStyle = rgb(col, .1); c.fillRect(12, y - .5, w - 12, 1);
+        // a layer seam carries its own depth label, so lines on or right beside one go unlabelled
+        if (!LAYERS.some(e => Math.abs(metres(e.from) - m) * mpx < 30)) { c.fillStyle = rgb(col, .55); c.fillText(fmtM(m), 16, y - 8); }
+      }
+    }
+  }
+
+  // --- walls: each row is painted once into an offscreen sprite (body, detail, soft shadow), then blitted ---
+  const UNIT = { glass: 118, folder: 62, mail: 58, box: 56, frame: 46, cabinet: 58 };
+  const PAINT = {
+    glass(g, x, y, w, h) { // cloud apps: cool glass panes
+      BS.rr(g, x, y, w, h, 8);
+      g.fillStyle = lin(g, y, y + h, 0, '#3690bd', 1, '#1a5682'); g.fill();
+      g.save(); g.clip();
+      g.fillStyle = lin(g, y, y + h, 0, 'rgba(214,246,255,.6)', .45, 'rgba(140,212,250,.12)', 1, 'rgba(120,205,255,.34)'); g.fillRect(x, y, w, h);
+      g.fillStyle = 'rgba(255,255,255,.14)';
+      for (const [o, sw] of [[w * .3, 18], [w * .3 + 28, 6], [w * .78, 10]]) { const sx = x + o; g.beginPath(); g.moveTo(sx, y); g.lineTo(sx + sw, y); g.lineTo(sx + sw - h * .7, y + h); g.lineTo(sx - h * .7, y + h); g.closePath(); g.fill(); }
+      g.restore();
+      BS.rr(g, x + .6, y + .6, w - 1.2, h - 1.2, 7.5); g.strokeStyle = 'rgba(220,248,255,.95)'; g.lineWidth = 1.2; g.stroke();
+      if (w > 44) {
+        g.fillStyle = 'rgba(255,255,255,.85)';
+        for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(x + 11 + k * 6, y + 9.5, 1.5, 0, 7); g.fill(); }
+        g.fillStyle = 'rgba(228,248,255,.55)';
+        BS.rr(g, x + 9, y + h - 13.5, Math.min(w - 18, w * .42), 3, 1.5); g.fill();
+        BS.rr(g, x + 9, y + h - 8, Math.min(w - 18, w * .26), 3, 1.5); g.fill();
+      }
+    },
+    folder(g, x, y, w, h) { // shared drives: manila folders
+      const tab = Math.min(w * .44, 26), ty = y + 6;
+      g.fillStyle = '#fff6dc'; g.fillRect(x + tab + 5, y + 2, w - tab - 9, 6);
+      g.fillStyle = 'rgba(120,80,20,.4)'; g.fillRect(x + tab + 5, y + 4.4, w - tab - 9, .7);
+      g.beginPath(); g.moveTo(x, y + 2); g.quadraticCurveTo(x, y, x + 2, y); g.lineTo(x + tab - 3, y); g.lineTo(x + tab + 3, ty); g.lineTo(x + w - 2, ty);
+      g.quadraticCurveTo(x + w, ty, x + w, ty + 2); g.lineTo(x + w, y + h - 2); g.quadraticCurveTo(x + w, y + h, x + w - 2, y + h); g.lineTo(x + 2, y + h); g.quadraticCurveTo(x, y + h, x, y + h - 2); g.closePath();
+      g.fillStyle = lin(g, y, y + h, 0, '#f5ca6e', .5, '#dba743', 1, '#a8752a'); g.fill();
+      g.strokeStyle = '#ffecba'; g.lineWidth = 1.1; g.stroke();
+      g.fillStyle = 'rgba(255,246,210,.5)'; g.fillRect(x + 3, ty + 4.5, w - 6, 1);
+      if (w > 34) {
+        const lw = Math.min(w - 16, 28), ly = ty + 9, lh = Math.min(10, y + h - 4 - ly);
+        g.fillStyle = '#fff8e4'; BS.rr(g, x + 8, ly, lw, lh, 1.5); g.fill();
+        g.fillStyle = 'rgba(110,72,20,.7)'; g.fillRect(x + 11, ly + lh * .3, lw - 6, 1.2); g.fillRect(x + 11, ly + lh * .62, (lw - 6) * .6, 1.2);
+      }
+    },
+    mail(g, x, y, w, h) { // email archives: indigo envelopes with a wax seal
+      BS.rr(g, x, y, w, h, 3.5);
+      g.fillStyle = lin(g, y, y + h, 0, '#9daaf6', 1, '#5562b8'); g.fill();
+      const cx = x + w / 2, fy = y + h * .56;
+      g.fillStyle = 'rgba(255,255,255,.17)'; g.beginPath(); g.moveTo(x + 1, y + 1); g.lineTo(cx, fy); g.lineTo(x + w - 1, y + 1); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(36,42,104,.4)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x + 1.5, y + h - 1.5); g.lineTo(cx - 5, fy + 2); g.moveTo(x + w - 1.5, y + h - 1.5); g.lineTo(cx + 5, fy + 2); g.stroke();
+      g.strokeStyle = '#eceeff'; g.lineWidth = 1.2; g.lineJoin = 'round'; g.beginPath(); g.moveTo(x + 1.5, y + 1.5); g.lineTo(cx, fy); g.lineTo(x + w - 1.5, y + 1.5); g.stroke();
+      BS.rr(g, x + .6, y + .6, w - 1.2, h - 1.2, 3); g.strokeStyle = '#d6dcff'; g.lineWidth = 1.1; g.stroke();
+      g.fillStyle = '#ffcf7a'; g.beginPath(); g.arc(cx, fy, 2.9, 0, 7); g.fill();
+      g.fillStyle = 'rgba(255,255,255,.65)'; g.beginPath(); g.arc(cx - .8, fy - .8, 1, 0, 7); g.fill();
+    },
+    box(g, x, y, w, h, i) { // legacy applications: beige boxes, green phosphor screens
+      BS.rr(g, x, y, w, h, 4);
+      g.fillStyle = lin(g, y, y + h, 0, '#e6dcc0', .6, '#c0b494', 1, '#8d8266'); g.fill();
+      g.strokeStyle = '#f8f0da'; g.lineWidth = 1; BS.rr(g, x + .5, y + .5, w - 1, h - 1, 3.5); g.stroke();
+      const sx = x + 5, sy = y + 4.5, sw = w - 10, sh = h - 13;
+      BS.rr(g, sx, sy, sw, sh, 2.5); g.fillStyle = lin(g, sy, sy + sh, 0, '#113525', 1, '#081a13'); g.fill();
+      g.strokeStyle = 'rgba(60,50,30,.65)'; g.stroke();
+      for (let k = 0, ly = sy + 3.5; ly < sy + sh - 3; k++, ly += 4.2) { g.fillStyle = `rgba(134,240,170,${k ? .62 : .95})`; g.fillRect(sx + 3.5, ly, (sw - 12) * (.35 + .65 * hash(i * 3.1 + k * 7.7 + x)), 1.5); }
+      g.fillStyle = 'rgba(70,60,40,.6)'; for (let k = 0; k < 3; k++) g.fillRect(x + 6 + k * 3.2, y + h - 6.2, 1.6, 3.2);
+      g.fillRect(x + w - 24, y + h - 5.2, 9, 1.4);
+    },
+    frame(g, x, y, w, h, i) { // core systems: steel cabinets, lamp panels, tape reels
+      BS.rr(g, x, y, w, h, 2.5);
+      g.fillStyle = lin(g, y, y + h, 0, '#93a0b8', .45, '#657087', 1, '#3d4558'); g.fill();
+      g.strokeStyle = '#d0daec'; g.lineWidth = 1; BS.rr(g, x + .5, y + .5, w - 1, h - 1, 2.2); g.stroke();
+      BS.rr(g, x + 4, y + 4, w - 8, 7, 1.5); g.fillStyle = '#10131a'; g.fill();
+      const top = y + 14, av = h - 18;
+      if (i % 2 === 0 && w > 30) {
+        const r = Math.min(7, av / 2), cy = top + av / 2;
+        for (const cx of [x + w * .28, x + w * .72]) {
+          g.fillStyle = '#141820'; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+          g.strokeStyle = '#dbe3f2'; g.lineWidth = 1; g.stroke();
+          g.strokeStyle = '#9a7650'; g.lineWidth = r * .3; g.beginPath(); g.arc(cx, cy, r * .62, 0, 7); g.stroke();
+        }
+        g.strokeStyle = 'rgba(219,227,242,.6)'; g.lineWidth = .8; g.beginPath(); g.moveTo(x + w * .28, cy - r); g.lineTo(x + w * .72, cy - r); g.stroke();
+      } else {
+        for (let ly = top + 1; ly < y + h - 4; ly += 3.2) { g.fillStyle = 'rgba(12,15,22,.5)'; g.fillRect(x + 5, ly, w - 10, 1.3); g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(x + 5, ly + 1.3, w - 10, .6); }
+      }
+    },
+    cabinet(g, x, y, w, h, i) { // offline archives: sepia filing drawers and stacks of paper
+      if (i % 3 === 2) {
+        const n = Math.floor(h / 3.4), sh = h / n;
+        g.fillStyle = '#b79a6c'; g.fillRect(x + 2, y + 1, w - 4, h - 1);
+        for (let k = 0; k < n; k++) {
+          const j = (hash(i * 7.13 + k * 3.7 + x) - .5) * 3.4;
+          g.fillStyle = k % 2 ? '#e6d6b0' : '#f7ecd0'; g.fillRect(x + 2 + j, y + k * sh, w - 4, sh - .6);
+          g.fillStyle = 'rgba(96,64,28,.42)'; g.fillRect(x + 2 + j, y + (k + 1) * sh - .7, w - 4, .7);
+        }
+        return;
+      }
+      BS.rr(g, x, y, w, h, 2.5); g.fillStyle = lin(g, y, y + h, 0, '#d2a268', .5, '#aa7c4a', 1, '#77532d'); g.fill();
+      g.strokeStyle = '#f5d6a2'; g.lineWidth = 1.1; BS.rr(g, x + .55, y + .55, w - 1.1, h - 1.1, 2.2); g.stroke();
+      const m = y + h / 2, cx = x + w / 2, dh = h / 2 - 5;
+      g.fillStyle = 'rgba(60,36,14,.65)'; g.fillRect(x + 1.5, m - .6, w - 3, 1.2); g.fillStyle = 'rgba(255,230,180,.4)'; g.fillRect(x + 1.5, m + .6, w - 3, .8);
+      for (const dy of [y + 2.5, m + 2.5]) {
+        const lh = Math.max(3.6, dh * .36);
+        g.fillStyle = '#fcf3dc'; g.fillRect(cx - 8, dy + dh * .1, 16, lh); g.strokeStyle = '#8a6a36'; g.lineWidth = .8; g.strokeRect(cx - 8, dy + dh * .1, 16, lh);
+        g.fillStyle = '#f7da96'; BS.rr(g, cx - 6, dy + dh * .1 + lh + 2, 12, 2.4, 1.2); g.fill();
+      }
+    },
+  };
+  const SLIM_W = 26, SLIM = {
+    glass: ['#3690bd', '#1a5682', 'rgba(220,248,255,.95)'], folder: ['#f5ca6e', '#a8752a', '#ffecba'], mail: ['#9daaf6', '#5562b8', '#d6dcff'],
+    box: ['#e6dcc0', '#8d8266', '#f8f0da'], frame: ['#93a0b8', '#3d4558', '#d0daec'], cabinet: ['#d2a268', '#77532d', '#f5d6a2'],
+  };
+  const RADIUS = { glass: 8, folder: 2, mail: 3.5, box: 4, frame: 2.5, cabinet: 2.5 };
+  function eachTile(r, fn) {
+    const style = LAYERS[r.layer].style;
+    for (const b of r.blocks) {
+      const n = Math.max(1, Math.round(b.w / UNIT[style])), uw = b.w / n;
+      for (let i = 0; i < n; i++) fn(style, b.x + i * uw + 1, Math.max(3, uw - 2), i);
+    }
+  }
+  const folderTab = w => Math.min(w * .44, 26);
+  // adds one tile's silhouette to the current path
+  function tilePath(c, style, x, y, w, h) {
+    if (style === 'folder' && w >= SLIM_W) {
+      const tab = folderTab(w);
+      c.moveTo(x, y); c.lineTo(x + tab - 3, y); c.lineTo(x + tab + 3, y + 6); c.lineTo(x + w, y + 6); c.lineTo(x + w, y + h); c.lineTo(x, y + h); c.closePath();
+      return;
+    }
+    const r = Math.max(0, Math.min(RADIUS[style], w / 2, h / 2));
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+  const ROW_T = 4, ROW_B = 22, SH_OFF = 3000, rowCache = new Map(), rowPool = [];
+  function rowSprite(r, w) {
+    const key = r._k || (r._k = `${r.layer}|${r.h.toFixed(1)}|${Math.round(w)}|` + r.blocks.map(b => b.x.toFixed(1) + ',' + b.w.toFixed(1)).join('|'));
+    let el = rowCache.get(key);
+    if (el) { rowCache.delete(key); rowCache.set(key, el); return el; } // keep recently used rows
+    el = rowPool.pop() || document.createElement('canvas');
+    el.width = Math.ceil(w * DPR); el.height = Math.ceil((r.h + ROW_T + ROW_B) * DPR);
+    const g = el.getContext('2d'), style = LAYERS[r.layer].style;
+    g.setTransform(DPR, 0, 0, DPR, 0, ROW_T * DPR);
+    // soft drop shadow only: the silhouette itself is drawn off-canvas and its shadow offset back
+    g.save(); g.shadowColor = 'rgba(0,0,0,.62)'; g.shadowBlur = 11 * DPR; g.shadowOffsetY = 7 * DPR; g.shadowOffsetX = SH_OFF * DPR; g.fillStyle = '#000';
+    for (const b of r.blocks) { BS.rr(g, b.x + 2 - SH_OFF, style === 'folder' ? 5 : 1, b.w - 4, r.h - (style === 'folder' ? 6 : 2), 5); g.fill(); }
+    g.restore();
+    eachTile(r, (st, x, tw, i) => {
+      if (tw >= SLIM_W) { PAINT[st](g, x, 0, tw, r.h, i); return; }
+      // a sliver at the screen edge: too narrow for detail, so just the material
+      const m = SLIM[st];
+      BS.rr(g, x, 0, tw, r.h, 2.5); g.fillStyle = lin(g, 0, r.h, 0, m[0], 1, m[1]); g.fill();
+      g.strokeStyle = m[2]; g.lineWidth = 1; g.stroke();
+    });
+    rowCache.set(key, el);
+    if (rowCache.size > 44) { const old = rowCache.keys().next().value; rowPool.push(rowCache.get(old)); rowCache.delete(old); }
+    return el;
+  }
+  // the few details that move: status lamps, cursors, turning reels
+  function drawWallFx(c, r, y, t) {
+    const style = LAYERS[r.layer].style;
+    if (style !== 'box' && style !== 'frame') return;
+    eachTile(r, (st, x, w, i) => {
+      if (w < SLIM_W) return;
+      if (st === 'box') {
+        c.fillStyle = Math.sin(t * 2.2 + i * 1.9) > -.6 ? '#7dffb0' : '#35604a'; c.fillRect(x + w - 10, y + r.h - 6, 2.8, 2.8);
+        if (Math.floor(t * 2 + i * .37) % 2) { c.fillStyle = 'rgba(170,255,198,.95)'; c.fillRect(x + w - 12, y + r.h - 14.5, 3, 4); }
+        return;
+      }
+      for (let k = 0; k < 4; k++) {
+        const on = Math.sin(t * (2 + k) + i * 1.7 + k) > .2;
+        c.fillStyle = on ? LAMPS[k] : '#2b303c';
+        c.fillRect(x + 7 + k * ((w - 17) / 3), y + 6, 3, 3);
+      }
+      if (i % 2 === 0 && w > 30) {
+        const av = r.h - 18, rr = Math.min(7, av / 2), cy = y + 14 + av / 2, a0 = t * 2.6 + i;
+        c.strokeStyle = '#e4ebf7'; c.lineWidth = 1.1; c.beginPath();
+        for (let q = 0; q < 2; q++) for (let k = 0; k < 3; k++) { const cx = x + w * (q ? .72 : .28), a = a0 + k * 2.094; c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * rr * .42, cy + Math.sin(a) * rr * .42); }
+        c.stroke();
+      }
+    });
+  }
+  const LAMPS = ['#ff6464', '#ffc65d', '#ff6464', '#7dffb0'];
+  function drawWalls(c, rws, d, w, h, t, py, rad, dim) {
+    for (const r of rws) {
+      const y = r.y - d;
+      if (y > h + 10 || y + r.h < -30) continue;
+      c.globalAlpha = 1 - dim * smooth((Math.abs(y + r.h / 2 - py) - rad * .3) / (rad * .7)); // rows level with the lantern are fully lit
+      const img = rowSprite(r, w), sh = r.h + ROW_T + ROW_B, kx = img.width / w;
+      for (const b of r.blocks) { // only the parts of the sprite that hold a block and its shadow
+        const x0 = Math.max(0, b.x - 16), x1 = Math.min(w, b.x + b.w + 16);
+        c.drawImage(img, x0 * kx, 0, (x1 - x0) * kx, img.height, x0, y - ROW_T, x1 - x0, sh);
+      }
+      drawWallFx(c, r, y, t);
+    }
+    c.globalAlpha = 1;
+  }
+  // drawn after the darkness, in each layer's own colour: walls stay readable however dark it gets
+  function drawOutlines(c, rws, d, h, a) {
+    c.lineWidth = 1.2;
+    for (const r of rws) {
+      const y = r.y - d;
+      if (y > h + 10 || y + r.h < -10) continue;
+      c.strokeStyle = rgb(mixc(LAYERS[r.layer].acc, WHITE, .35), a);
+      c.beginPath(); eachTile(r, (st, x, w) => tilePath(c, st, x + .6, y + .6, w - 1.2, r.h - 1.2)); c.stroke();
+    }
+  }
+  // walls catch the lantern: its pool spills across nearby faces, and the edges facing it get a rim of light
+  function drawWallLight(c, rws, d, h, x, y, rad, k, spr) {
+    if (k <= .02) return;
+    const R = rad * 1.05;
+    let any = false;
+    c.save(); c.beginPath();
+    for (const r of rws) {
+      const ry = r.y - d;
+      if (ry > y + R || ry + r.h < y - R) continue;
+      eachTile(r, (st, tx, tw) => tilePath(c, st, tx, ry, tw, r.h)); any = true;
+    }
+    if (any) { c.clip(); c.globalAlpha = .5 * k; spot(c, spr, x, y, R); }
+    c.restore();
+    if (!any) return;
+    c.save(); c.beginPath();
+    for (const r of rws) {
+      const ry = r.y - d;
+      if (ry > y + R || ry + r.h < y - R) continue;
+      const above = y < ry + r.h / 2, top = LAYERS[r.layer].style === 'folder' ? 9 : 5;
+      eachTile(r, (st, tx, tw) => {
+        const q = RADIUS[st];
+        if (!above) c.rect(tx + q, ry + r.h - 2, Math.max(0, tw - q * 2), 2);
+        else if (st === 'folder' && tw >= SLIM_W) { const tab = folderTab(tw); c.rect(tx + 2, ry, tab - 6, 2); c.rect(tx + tab + 4, ry + 6, tw - tab - 6, 2); }
+        else c.rect(tx + q, ry, Math.max(0, tw - q * 2), 2);
+      });
+      for (const b of r.blocks) {
+        if (x < b.x) c.rect(b.x + 1, ry + top, 2, r.h - top - 4); else if (x > b.x + b.w) c.rect(b.x + b.w - 3, ry + top, 2, r.h - top - 4);
+      }
+    }
+    c.clip(); c.globalAlpha = Math.min(1, 1.1 * k); spot(c, glow(WHITE, 1), x, y, R * 1.25);
+    c.restore();
+  }
+  // how far the probe's light reaches; e is the eased lights-on finale (0..1)
+  const lightRadius = (l, w, e = 0) => (58 + Math.max(0, l) * 1.8) * clamp(w / 400, .85, 1.15) * (1 + e * 6);
+  // layer boundaries: a seam of the next layer's light crossing the shaft, labelled with the depth it starts at
+  const diamond = (c, x, y, r) => { c.beginPath(); c.moveTo(x, y - r); c.lineTo(x + r, y); c.lineTo(x, y + r); c.lineTo(x - r, y); c.closePath(); c.fill(); };
+  function drawSeams(c, w, h, d, ypx, minY, labels) {
+    const bh = clamp(ypx * .07, 16, 44);
+    for (let i = 1; i < NL; i++) {
+      const y = (START_YEAR - LAYERS[i].from) * ypx - d, a = clamp((y - minY + 10) / 30, 0, 1);
+      if (y < -bh || y > h + bh || a <= 0) continue;
+      const col = LAYERS[i].acc;
+      if (!labels) {
+        c.globalAlpha = .55 * a; c.drawImage(glow(col), -w * .3, y - bh, w * 1.6, bh * 2);
+        c.globalAlpha = a; c.fillStyle = rgb(mixc(col, WHITE, .45), .9); c.fillRect(0, y - .8, w, 1.6);
+      } else {
+        c.globalAlpha = a;
+        c.font = '700 10px Inter, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
+        c.fillStyle = rgb(mixc(col, WHITE, .35), .95);
+        c.fillText(`${fmtM(metres(LAYERS[i].from))}\u2009·\u2009${trk(LAYERS[i].name)}`, 30, y - 11);
+        diamond(c, 20, y - 11, 3.4);
+      }
+    }
+    c.globalAlpha = 1;
+  }
+  /* Lights-on finale. Every layer shows at once: each one's colour switches on in turn, from the bottom
+     back up to the surface (drawReveal, under the walls), while six rings, one per layer, ripple out from the lantern. */
+  const revealAt = (k, i) => smooth((k * 1.75 - (NL - 1 - i) * .14) / .5);
+  function drawReveal(c, w, h, k, top) {
+    const g = c.createLinearGradient(0, top, 0, h);
+    for (let i = 0; i < NL; i++) {
+      const col = rgb(LAYERS[i].lit, revealAt(k, i) * .94);
+      g.addColorStop((i + .1) / NL, col); g.addColorStop((i + .9) / NL, col);
+    }
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+  }
+  function drawRevealMarks(c, w, h, k, top, labels) {
+    const bh = (h - top) / NL;
+    for (let i = 0; i < NL; i++) {
+      const a = revealAt(k, i), y = top + bh * i;
+      if (a <= 0) continue;
+      if (!labels) { if (i) { c.globalAlpha = a * .5; c.fillStyle = rgb(mixc(LAYERS[i].acc, WHITE, .5)); c.fillRect(0, y - .6, w, 1.2); } continue; }
+      if (bh < 60) continue;
+      c.globalAlpha = a * .95; c.font = '700 10px Inter, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
+      c.fillStyle = rgb(mixc(LAYERS[i].acc, WHITE, .5));
+      c.fillText(trk(LAYERS[i].name), 30, y + bh - 15);
+      diamond(c, 20, y + bh - 15, 3.4);
+    }
+    c.globalAlpha = 1;
+  }
+  function drawSweep(c, w, h, x, y, k) {
+    if (k <= 0) return;
+    const R = Math.hypot(Math.max(x, w - x), Math.max(y, h - y)) + 80, e = BS.ease(k);
+    c.save(); c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = .1 * Math.sin(Math.PI * k) * FX; c.fillStyle = '#dff6ff'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < NL; i++) {
+      const ki = clamp(k * 1.5 - i * .09, 0, 1);
+      if (ki <= 0 || ki >= 1) continue;
+      const r = BS.ease(ki) * R, a = (1 - ki) * (1 - ki);
+      c.strokeStyle = rgb(LAYERS[i].acc); c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+      c.globalAlpha = a * .16; c.lineWidth = 16; c.stroke();
+      c.globalAlpha = a * .95; c.lineWidth = 2.2; c.stroke();
+    }
+    c.globalAlpha = (1 - k) * (1 - k) * .75; spot(c, glow(WHITE, 1), x, y, 70 + 170 * e);
+    c.restore();
+  }
+  const docY = (it, d, t) => it.y - d + Math.sin(t * 2.6 + it.ph) * 3.5;
+  let docSpr = null;
+  function docSprite() {
+    if (docSpr) return docSpr;
+    const S = mkCanvas(44, 44), g = S.g;
+    g.translate(22, 22);
+    const page = () => { g.beginPath(); g.moveTo(-6.5, -8.5); g.lineTo(2.5, -8.5); g.lineTo(6.5, -4.5); g.lineTo(6.5, 8.5); g.lineTo(-6.5, 8.5); g.closePath(); };
+    g.save(); g.shadowColor = 'rgba(150,232,255,1)'; g.shadowBlur = 7 * DPR; g.fillStyle = '#fff'; page(); g.fill(); g.restore();
+    page(); g.fillStyle = lin(g, -8.5, 8.5, 0, '#ffffff', 1, '#d2f1ff'); g.fill();
+    g.fillStyle = '#9fd6ef'; g.beginPath(); g.moveTo(2.5, -8.5); g.lineTo(2.5, -4.5); g.lineTo(6.5, -4.5); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(22,82,122,.88)'; g.fillRect(-4, -2.4, 8, 1.3); g.fillRect(-4, .7, 8, 1.3); g.fillRect(-4, 3.8, 5.2, 1.3);
+    return docSpr = S.cv;
+  }
+  // documents glow through the dark, with a slow pulse ring
+  function drawDocGlows(c, its, d, h, t) {
+    const g = glow(COOL, 1);
+    c.strokeStyle = 'rgb(170,236,255)'; c.lineWidth = 1.3;
+    for (const it of its) {
+      const y = docY(it, d, t);
+      if (y < -40 || y > h + 40) continue;
+      const p = mod(t * .75 + it.ph, 1);
+      c.globalAlpha = .72 + .2 * Math.sin(t * 3 + it.ph); spot(c, g, it.x, y, 27);
+      c.globalAlpha = (1 - p) * (1 - p) * .7; c.beginPath(); c.arc(it.x, y, 11 + p * 20, 0, Math.PI * 2); c.stroke();
+    }
+    c.globalAlpha = 1;
+  }
+  function drawDocIcons(c, its, d, h, t) {
+    const img = docSprite();
+    for (const it of its) {
+      const y = docY(it, d, t);
+      if (y < -30 || y > h + 30) continue;
+      c.save(); c.translate(it.x, y); c.rotate(Math.sin(t * 1.4 + it.ph) * .12); c.drawImage(img, -22, -22, 44, 44); c.restore();
+    }
+  }
+  // a collected page spirals into the lantern
+  function drawFlies(c, fl, x, y) {
+    const img = docSprite();
+    for (const f of fl) {
+      const e = BS.ease(f.k), a = e * 5.2, r = 1 - e, ca = Math.cos(a), sa = Math.sin(a);
+      const sc = 1 - .72 * e;
+      c.save(); c.translate(x + (f.dx * ca - f.dy * sa) * r, y + (f.dx * sa + f.dy * ca) * r); c.rotate(a); c.scale(sc, sc);
+      c.globalAlpha = 1 - f.k * f.k * f.k; c.drawImage(img, -22, -22, 44, 44); c.restore();
+    }
+  }
+  // the lantern: comet tail, sparks, layered bloom, a turning ring and a living core
+  function drawTrail(c, pts, d, warm, fl) {
+    const n = pts.length, a0 = .6 * fl;
+    for (let i = n - 1; i >= 1; i -= 2) {
+      const k = 1 - i / n, y = pts[i].y - d, r = PR * (.5 + 1.9 * k);
+      if (warm < .98) { c.globalAlpha = a0 * k * k * (1 - warm); spot(c, glow(COOL), pts[i].x, y, r); }
+      if (warm > .02) { c.globalAlpha = a0 * k * k * warm; spot(c, glow(WARM), pts[i].x, y, r); }
+    }
+    c.globalAlpha = 1;
+  }
+  function drawSparks(c, sp, d, warm, fl) {
+    const g = glow(warm > .5 ? WARM : COOL, 1); // tiny sprites: soft dots, a few pixels each
+    for (const q of sp) {
+      const k = 1 - q.life / q.max;
+      c.globalAlpha = k * fl * (.6 + .4 * Math.sin(q.life * 40 + q.s * 9));
+      spot(c, g, q.x, q.y - d, q.s * (1.5 + 1.5 * k));
+    }
+    c.globalAlpha = 1;
+  }
+  function drawProbe(c, x, y, t, warm, fl, blink, got) {
+    const pulse = 1 + .05 * Math.sin(t * 5.2) + .5 * got * got, a = fl * (blink ? .3 : 1);
+    if (warm < .98) { c.globalAlpha = a * (1 - warm); spot(c, glow(COOL, 1), x, y, PR * 4.3 * pulse); }
+    if (warm > .02) { c.globalAlpha = a * warm; spot(c, glow(WARM, 1), x, y, PR * 4.3 * pulse); }
+    c.globalAlpha = a * .5; spot(c, glow(WHITE, 1), x, y, PR * 7.5 * pulse, PR * .55); // lens streak
+    if (got > 0) { // pickup ring
+      c.globalAlpha = got * got * .6; c.strokeStyle = 'rgb(190,240,255)'; c.lineWidth = 1 + 1.4 * got;
+      c.beginPath(); c.arc(x, y, PR * 1.6 + (1 - got) * 46, 0, Math.PI * 2); c.stroke();
+    }
+    c.globalAlpha = 1;
+  }
+  function drawProbeCore(c, x, y, t, warm, fl, out) {
+    const r = PR * (.5 + .03 * Math.sin(t * 7)) * (1 - .35 * out);
+    c.globalAlpha = clamp(fl + .25, .3, 1);
+    c.fillStyle = warm > .02 ? rgb(mixc(WHITE, [255, 214, 190], warm)) : '#fff';
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    // housing: two arcs turning around the core
+    c.strokeStyle = `rgba(255,255,255,${.8 * (1 - out)})`; c.lineWidth = 1.4; c.lineCap = 'round';
+    const a = t * (RM ? .6 : 2.2), rr = PR * 1.12;
+    c.beginPath(); c.arc(x, y, rr, a, a + 1.25); c.stroke();
+    c.beginPath(); c.arc(x, y, rr, a + Math.PI, a + Math.PI + 1.25); c.stroke();
+    c.lineCap = 'butt'; c.globalAlpha = 1;
+  }
+  function drawParts(c, ps) {
+    for (const q of ps) {
+      const r = q.size * 2.7;
+      c.globalAlpha = clamp(q.life / q.max, 0, 1); spot(c, glow(q.col, 1), q.x, q.y, r);
+    }
+    c.globalAlpha = 1;
+  }
+  // wall hit: a shock ring out from the impact
+  function drawHitRing(c, hf) {
+    const k = clamp(hf.k, 0, 1), e = BS.ease(k);
+    c.strokeStyle = 'rgb(255,170,150)';
+    c.globalAlpha = (1 - k) * .85; c.lineWidth = 1 + 2 * (1 - k); c.beginPath(); c.arc(hf.x, hf.y, 12 + e * 84, 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = (1 - k) * .45; c.lineWidth = 1; c.beginPath(); c.arc(hf.x, hf.y, 6 + e * 52, 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = (1 - k) * (1 - k); spot(c, glow(C_HIT, 1), hf.x, hf.y, 30 + 40 * e);
+    c.globalAlpha = 1;
+  }
+  function drawPops(c, ps) {
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const q of ps) {
+      c.globalAlpha = clamp(q.life * 2, 0, 1);
+      c.font = `700 ${q.size}px Inter, sans-serif`;
+      c.fillStyle = 'rgba(2,8,14,.5)'; c.fillText(q.text, q.x, q.y + 1.5);
+      c.fillStyle = q.color; c.fillText(q.text, q.x, q.y);
+    }
+    c.globalAlpha = 1;
+  }
+  function drawBanner(c, w, b, col, tint) {
+    const sc = b.sc || 1;
+    c.save(); c.translate(w / 2, b.y); c.scale(sc, sc);
+    const band = b.band == null ? .5 : b.band, size = b.compact ? 36 : 58, sy = b.compact ? 31 : 42;
+    c.globalAlpha = b.a;
+    if (band > 0) { c.fillStyle = lin(c, -104, 104, 0, rgb(tint, 0), .32, rgb(tint, band), .68, rgb(tint, band), 1, rgb(tint, 0)); c.fillRect(-w, -104, w * 2, 208); }
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    if (b.kick) { c.font = '700 10.5px Inter, sans-serif'; c.fillStyle = rgb(col, .9); c.fillText(trk(b.kick), 0, -44); }
+    const fig = commas(Math.floor(b.m)), by = size * .36; // the big line is always a depth
+    c.fillStyle = rgb(tint, .45); drawFigure(c, 0, by + 2.5, fig, size);
+    c.fillStyle = '#f2fbff'; drawFigure(c, 0, by, fig, size);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = '700 13px Inter, sans-serif';
+    const sub = trk(b.sub), sw = Math.min(c.measureText(sub).width, w - 60);
+    c.fillStyle = rgb(tint, .5); c.fillText(sub, 0, sy + 1.5, w - 60);
+    c.fillStyle = rgb(mixc(col, WHITE, band < .5 ? .75 : .3)); c.fillText(sub, 0, sy, w - 60);
+    c.fillStyle = rgb(mixc(col, WHITE, band < .5 ? .6 : 0), .6); c.fillRect(-sw / 2 - 30, sy - .5, 20, 1); c.fillRect(sw / 2 + 10, sy - .5, 20, 1);
+    c.restore();
+  }
+  // light gauge: a bar of lantern light with a glowing head; pulses red when low, flares on a pickup
+  function drawMeter(c, cx, y, bw, l, t, flash) {
+    const bx = cx - bw / 2, hh = 6, low = l < 25, f = clamp(l / 100, 0, 1), fw = Math.max(hh, bw * f);
+    const p = low ? .5 + .5 * Math.sin(t * 10) : 0, fill = low ? [255, 118 + 40 * p, 98] : [143, 230, 255];
+    c.fillStyle = 'rgba(255,255,255,.1)'; BS.rr(c, bx, y, bw, hh, 3); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.2)'; c.lineWidth = .8; c.stroke();
+    c.save(); c.globalCompositeOperation = 'lighter';
+    if (low) { c.globalAlpha = .25 + .35 * p; c.drawImage(glow(WARM), bx - 14, y - 10, bw + 28, hh + 20); }
+    if (flash > 0) { c.globalAlpha = flash * .7; c.drawImage(glow(COOL), bx - 18, y - 13, bw + 36, hh + 26); }
+    c.restore();
+    c.fillStyle = rgb(mixc(fill, WHITE, flash * .8), low ? .75 + .25 * p : 1); BS.rr(c, bx, y, fw, hh, 3); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(bx + 2.5, y + 1.2, Math.max(0, fw - 5), 1.3);
+    c.fillStyle = 'rgba(3,10,18,.45)'; for (const q of [.25, .5, .75]) c.fillRect(bx + bw * q - .5, y, 1, hh);
+    c.save(); c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = .9; spot(c, glow(low ? WARM : COOL, 1), bx + fw - 1, y + hh / 2, 9 + 7 * flash);
+    c.globalAlpha = .35 + .65 * f; spot(c, glow(low ? WARM : COOL, 1), bx - 13, y + hh / 2, 8); // the lantern itself
+    c.restore();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(bx - 13, y + hh / 2, 2.1, 0, 7); c.fill();
+    c.font = '500 10px Inter, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
+    c.fillStyle = low ? rgb(fill, .95) : 'rgba(227,246,255,.75)'; c.fillText(Math.ceil(clamp(l, 0, 100)) + '%', bx + bw + 8, y + hh / 2 + .5);
+  }
+  /* A depth figure: monospace digits (with a narrower comma) and a small "m" beside them, centred on cx as a group.
+     Uses the current fillStyle. Given the previous reading and k (0..1), the digits that changed roll over. */
+  function drawFigure(c, cx, y, cur, size, prev, k) {
+    const us = size * .45, gap = size * .16, ga = c.globalAlpha;
+    c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+    c.font = `700 ${us}px Inter, sans-serif`;
+    const uw = c.measureText('m').width;
+    c.font = `700 ${size}px Inter, sans-serif`;
+    const cw = c.measureText('0').width, adv = ch => ch === ',' ? cw * .5 : cw;
+    let tw = 0; for (const ch of cur) tw += adv(ch);
+    const x0 = cx - (tw + gap + uw) / 2;
+    let x = x0;
+    c.textAlign = 'center';
+    if (prev == null || k >= 1) for (const ch of cur) { c.fillText(ch, x + adv(ch) / 2, y); x += adv(ch); }
+    else {
+      const off = cur.length - prev.length, e = 1 - Math.pow(1 - k, 3), dy = size * .7;
+      c.save(); c.beginPath(); c.rect(x0 - 2, y - size * .82, tw + 4, size * .98); c.clip();
+      for (let i = 0; i < cur.length; i++) {
+        const ch = cur[i], was = prev[i - off], xc = x + adv(ch) / 2;
+        x += adv(ch);
+        if (ch === was) { c.globalAlpha = ga; c.fillText(ch, xc, y); continue; }
+        if (was) { c.globalAlpha = ga * (1 - e); c.fillText(was, xc, y - dy * e); }
+        c.globalAlpha = ga * e; c.fillText(ch, xc, y + dy * (1 - e));
+      }
+      c.restore();
+    }
+    c.font = `700 ${us}px Inter, sans-serif`; c.textAlign = 'left';
+    c.globalAlpha = ga * .72; c.fillText('m', x0 + tw + gap, y); c.globalAlpha = ga;
+  }
+  // the HUD depth reads like an odometer: during a dive (live) it counts in 10 m steps and each step rolls over;
+  // otherwise it shows the exact metre and stays still
+  function drawDepth(c, cx, y, m, live, size, col) {
+    const STEP = 10, val = live ? Math.floor(m / STEP) * STEP : Math.floor(m);
+    c.fillStyle = col;
+    if (!live || RM) drawFigure(c, cx, y, commas(val), size);
+    else drawFigure(c, cx, y, commas(val), size, commas(Math.max(0, val - STEP)), clamp((m - val) / STEP / .5, 0, 1));
+  }
+  // slim depth rail on the right edge: the whole dive, one segment per layer, a tick every 1,000 m
+  const RAIL_W = 50, RAIL_PAD = 8, railCache = new Map();
+  const railY = (yr, len) => (START_YEAR - yr) / (START_YEAR - END_YEAR) * len;
+  const railSeg = (i, len) => [railY(LAYERS[i].from, len) + (i ? 1.5 : 0), railY(i + 1 < NL ? LAYERS[i + 1].from : END_YEAR, len) - (i + 1 < NL ? 1.5 : 0)];
+  function railSprite(len) { // the parts that never change: unlit segments, depth ticks and labels
+    const key = Math.round(len);
+    let el = railCache.get(key);
+    if (el) return el;
+    const S = mkCanvas(RAIL_W, len + RAIL_PAD * 2), g = S.g, x = RAIL_W - 9;
+    g.translate(0, RAIL_PAD);
+    for (let i = 0; i < NL; i++) { const [a, b] = railSeg(i, len); g.fillStyle = rgb(LAYERS[i].acc, .3); BS.rr(g, x - 1.5, a, 3, b - a, 1.5); g.fill(); }
+    g.font = '500 8.5px Inter, sans-serif'; g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (let m = 1000; m < BOTTOM_M; m += 1000) {
+      const y = railY(yearOf(m), len);
+      g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(x - 7.5, y - .5, 4, 1);
+      if (len > 260) { g.fillStyle = 'rgba(235,248,255,.6)'; g.fillText(commas(m), x - 10.5, y + .5); }
+    }
+    if (railCache.size > 3) railCache.clear();
+    railCache.set(key, el = S.cv);
+    return el;
+  }
+  function drawRail(c, w, rail, yearP, lit) {
+    const x = w - 9, y0 = rail.top, len = rail.bot - rail.top;
+    if (len < 60) return;
+    const yp = y0 + railY(clamp(yearP, END_YEAR, START_YEAR), len);
+    c.drawImage(railSprite(len), w - RAIL_W, y0 - RAIL_PAD, RAIL_W, len + RAIL_PAD * 2);
+    for (let i = 0; i < NL; i++) {
+      const [a, b] = railSeg(i, len), done = lit ? y0 + b : Math.min(y0 + b, yp);
+      if (done > y0 + a + .5) { c.fillStyle = rgb(mixc(LAYERS[i].acc, WHITE, .15)); BS.rr(c, x - 1.5, y0 + a, 3, done - y0 - a, 1.5); c.fill(); }
+    }
+    c.save(); c.globalCompositeOperation = 'lighter'; spot(c, glow(WHITE, 1), x, yp, 10); c.restore();
+    c.fillStyle = '#fff'; diamond(c, x, yp, 3.8);
+  }
+  // top HUD: depth, layer, light gauge (score, documents and the opening hint are game-only)
+  function drawHud(c, w, h, hud, t, col, tint) {
+    const top = hud.top || 0;
+    c.fillStyle = lin(c, 0, 122 + top, 0, rgb(tint, .96), .6, rgb(tint, .82), 1, rgb(tint, 0)); c.fillRect(0, 0, w, 122 + top);
+    if (!hud.show) return;
+    c.save(); c.translate(0, top);
+    drawDepth(c, w / 2, 50, hud.m, hud.live, Math.min(40, w * .115), '#f2fbff');
+    c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    c.font = '700 11px Inter, sans-serif'; c.fillStyle = rgb(mixc(col, WHITE, .25), .95);
+    c.fillText(trk(hud.layer), w / 2, 68);
+    drawMeter(c, w / 2, 79, Math.min(150, w * .4), hud.light, t, hud.flash || 0);
+    if (hud.score != null) {
+      c.textBaseline = 'alphabetic';
+      c.textAlign = 'left'; c.font = '700 9.5px Inter, sans-serif'; c.fillStyle = 'rgba(227,246,255,.62)';
+      c.fillText(trk('Score'), 18, 28);
+      c.font = '700 20px Inter, sans-serif'; c.fillStyle = '#f2fbff';
+      c.fillText(BS.fmt(hud.score), 18, 51);
+      if (hud.docs != null) {
+        c.textAlign = 'right'; c.font = '700 9.5px Inter, sans-serif'; c.fillStyle = 'rgba(227,246,255,.62)';
+        c.fillText(trk('Docs'), w - 18, 28);
+        c.font = '700 20px Inter, sans-serif'; c.fillStyle = rgb(mixc(COOL, WHITE, .6 + .4 * (hud.flash || 0)));
+        c.fillText(hud.docs, w - 18, 51);
+      }
+    }
+    c.restore();
+    if (hud.hint > 0) {
+      const y = hud.hintY, sx = w / 2 + Math.sin(t * 2.4) * 17;
+      c.globalAlpha = hud.hint;
+      c.fillStyle = lin(c, y - 104, h, 0, rgb(tint, 0), .3, rgb(tint, .74), 1, rgb(tint, .9)); c.fillRect(0, y - 104, w, h - y + 104);
+      c.strokeStyle = 'rgba(227,246,255,.4)'; c.lineWidth = 1.5; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(w / 2 - 26, y - 46); c.lineTo(w / 2 + 26, y - 46);
+      c.moveTo(w / 2 - 31, y - 46); c.lineTo(w / 2 - 27, y - 49.5); c.moveTo(w / 2 - 31, y - 46); c.lineTo(w / 2 - 27, y - 42.5);
+      c.moveTo(w / 2 + 31, y - 46); c.lineTo(w / 2 + 27, y - 49.5); c.moveTo(w / 2 + 31, y - 46); c.lineTo(w / 2 + 27, y - 42.5);
+      c.stroke(); c.lineCap = 'butt';
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(sx, y - 46, 4.5, 0, 7); c.fill();
+      c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+      c.font = '700 15px Inter, sans-serif'; c.fillStyle = '#f2fbff';
+      c.fillText('Slide anywhere to steer', w / 2, y - 20);
+      c.font = '500 12.5px Inter, sans-serif'; c.fillStyle = 'rgba(214,244,255,.82)';
+      c.fillText('Collect documents · find the gaps', w / 2, y);
+      c.globalAlpha = 1;
+    }
+  }
+  let vig = null; // edge vignette for low light, cached per size
+  function vignette(c, w, h) {
+    if (!vig || vig.w !== w || vig.h !== h) {
+      const g = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * .42, w / 2, h / 2, Math.hypot(w, h) / 2);
+      g.addColorStop(0, 'rgba(255,70,45,0)'); g.addColorStop(1, 'rgba(255,70,45,1)');
+      vig = { w, h, g };
+    }
+    return vig.g;
+  }
+
+  /* One frame of the shaft. s = { t, depth, dist, v, yTop, yBot, pAbs, gauge, yearPx, gaugeMin, rail, shakeX, shakeY,
+     rows, items, trail, sparks, parts, pops, flies, px, py, light, rad, amb, blink, sweep, out, got, layerFx, hit, banner, hud }
+     yTop/yBot/yearPx are on the internal axis; everything drawn for the player is converted to metres. */
+  function render(c, w, h, s) {
+    const t = s.t, ypx = s.yearPx || YEAR_PX, bw = clamp(ypx * .25, 10, 140) / ypx;
+    const yearP = s.yTop - (s.py / h) * (s.yTop - s.yBot);
+    const acc = layerCol('acc', yearP, bw), tint = layerCol('dark', yearP, bw);
+    const out = s.out || 0, got = s.got || 0, layerK = (s.layerFx || 0) * FX, lt = s.light == null ? 100 : s.light;
+    const low = clamp((30 - lt) / 30, 0, 1) * (s.sweep > 0 ? 0 : 1), warm = Math.max(low, out);
+    // low light sputters
+    const sput = low > 0 && !RM && Math.sin(t * 41) * Math.sin(t * 27.3) > .62 - .3 * low ? .55 : 1;
+    const fl = (1 - .12 * low + .12 * low * Math.sin(t * 17)) * sput * (1 - .78 * out);
+    const amb = s.amb * (1 - .4 * layerK * layerK);
+    /* Darkness, deeper = darker, with no full-screen passes: the water is simply painted darker, walls dim with
+       distance from the lantern (less than the water, so they always read), and the lantern adds its pool back. */
+    const dBg = lerp(amb * .8, .94, out), dWall = lerp(amb * .42, .86, out), seen = 1 - dBg * .6;
+    const shaken = s.shakeX || s.shakeY;
+
+    const B = backdrop(w, h), g = B.g;
+    drawBackground(g, w, h, s.yTop, s.yBot, ypx, bw, tint, dBg);
+    drawPattern(g, w, h, s.depth, s.yTop, ypx, .1 * seen);
+    const revTop = Math.max(0, (s.gaugeMin || 0) - 8);
+    if (s.sweep > 0) drawReveal(g, w, h, s.sweep, revTop);
+    const swE = BS.ease(s.sweep || 0);
+    const shaftK = clamp(1 - s.pAbs * 1.9, 0, 1) * .6 * (1 - out) + swE * .45;
+    if (shaftK > .01) drawShafts(g, w, h, t, shaftK);
+    // the pool of light itself, in the colour of the water it falls on
+    g.globalCompositeOperation = 'lighter';
+    const [ea, eb, et] = layerMix(yearP, bw), pk = (.5 + .55 * dBg) * fl * (1 - warm * .5) * (1 - .9 * swE), pr = s.rad * 1.02;
+    if (et < .98) { g.globalAlpha = pk * (1 - clamp(et, 0, 1)); spot(g, glow(LAYERS[ea].pool), s.px, s.py, pr); }
+    if (et > .02) { g.globalAlpha = pk * clamp(et, 0, 1); spot(g, glow(LAYERS[eb].pool), s.px, s.py, pr); }
+    if (warm > .02) { g.globalAlpha = .3 * fl * warm; spot(g, glow(WARM), s.px, s.py, pr * .7); }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    c.drawImage(B.cv, 0, 0, w, h);
+    c.save();
+    if (shaken) c.translate(s.shakeX, s.shakeY);
+    drawStrata(c, w, h, s.depth, acc, seen);
+    drawMotes(c, w, h, t, s.dist || 0, s.v || 0, rgb(mixc(acc, WHITE, .5)), false, .55 + .45 * seen);
+    if (s.gauge && swE < 1) { c.globalAlpha = (1 - swE) * seen; drawRuler(c, w, h, s.depth, ypx, s.gaugeMin, acc); c.globalAlpha = 1; }
+    drawWalls(c, s.rows, s.depth, w, h, t, s.py - (s.shakeY || 0), s.rad, dWall);
+    drawOutlines(c, s.rows, s.depth, h, clamp(.2 + .55 * s.amb, 0, .7) * (1 - .55 * out));
+    c.globalCompositeOperation = 'lighter';
+    if (s.gauge) drawSeams(c, w, h, s.depth, ypx, s.gaugeMin, false);
+    if (s.sweep > 0) drawRevealMarks(c, w, h, s.sweep, revTop, false);
+    drawWallLight(c, s.rows, s.depth, h, s.px - (s.shakeX || 0), s.py - (s.shakeY || 0), s.rad, fl * (s.blink ? .6 : 1) * (1 - .6 * swE), glow(warm > .5 ? WARM : COOL));
+    c.restore();
+
+    c.globalCompositeOperation = 'lighter';
+    drawDocGlows(c, s.items, s.depth, h, t);
+    drawTrail(c, s.trail, s.depth, warm, fl);
+    if (s.sparks) drawSparks(c, s.sparks, s.depth, warm, fl);
+    drawProbe(c, s.px, s.py, t, warm, fl, s.blink, got);
+    drawParts(c, s.parts);
+    if (s.hit) drawHitRing(c, s.hit);
+    drawMotes(c, w, h, t, s.dist || 0, s.v || 0, '#fff', true, 1);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    drawDocIcons(c, s.items, s.depth, h, t);
+    if (s.flies) drawFlies(c, s.flies, s.px, s.py);
+    drawProbeCore(c, s.px, s.py, t, warm, fl, out);
+    if (s.gauge) drawSeams(c, w, h, s.depth, ypx, s.gaugeMin, true);
+
+    if (s.sweep > 0) { drawRevealMarks(c, w, h, s.sweep, revTop, true); drawSweep(c, w, h, s.px, s.py, s.sweep); }
+    // screen-wide moments: a new layer brightens the shaft, a hit flashes, low light closes in from the edges
+    if (layerK > 0 || s.hit || s.lowV > 0) {
+      c.save(); c.globalCompositeOperation = 'lighter';
+      if (layerK > 0) { c.globalAlpha = .2 * layerK * layerK; c.fillStyle = rgb(acc); c.fillRect(0, 0, w, h); }
+      if (s.hit && s.hit.k < .35) { const q = 1 - s.hit.k / .35; c.globalAlpha = .2 * q * q * FX; c.fillStyle = 'rgb(255,130,100)'; c.fillRect(0, 0, w, h); }
+      if (s.lowV > 0) { c.globalAlpha = s.lowV * (.36 + (RM ? 0 : .14 * Math.sin(t * 6.3))); c.fillStyle = vignette(c, w, h); c.fillRect(0, 0, w, h); }
+      c.restore();
+    }
+
+    drawPops(c, s.pops);
+    if (s.banner) drawBanner(c, w, s.banner, acc, tint);
+    if (s.hud) {
+      if (s.hud.show) { c.fillStyle = lin(c, h - 76, h, 0, rgb(tint, 0), 1, rgb(tint, .6)); c.fillRect(0, h - 76, w, 76); }
+      drawHud(c, w, h, s.hud, t, acc, tint);
+      if (s.rail && s.hud.show) drawRail(c, w, s.rail, yearP, s.sweep > 0);
+    }
+  }
+
+  const GAUGE_MIN = 126; // the depth ruler, layer seams and finale strata start below the HUD
+  function draw() {
+    const pAbs = clamp(depth / TOTAL, 0, 1), e = BS.ease(lightsOn);
+    let bn = null;
+    if (banner) {
+      const k = banner.life / banner.max, inK = clamp((1 - k) * 5, 0, 1);
+      bn = { m: banner.m, sub: banner.sub, kick: banner.kick, a: clamp(Math.min(k * 3, (1 - k) * 6), 0, 1), sc: RM ? 1 : 1.12 - .12 * BS.ease(inK), y: H * .62 };
+      if (won) { // the finale's caption sits inside one stratum, clear of the layer labels
+        const top = GAUGE_MIN + SAFE_T - 8, bh = (H - top) / NL;
+        bn.compact = true; bn.band = .22; bn.y = top + bh * 3.36; bn.sc *= Math.min(1, bh / 100);
+      }
+    }
+    const sh = shake * FX;
+    render(ctx, W, H, {
+      t: clock, depth, dist: depth, v: vel, yTop: yearAt(depth), yBot: yearAt(depth + H), pAbs,
+      gauge: true, yearPx: YEAR_PX, gaugeMin: GAUGE_MIN + SAFE_T, rail: { top: 134 + SAFE_T, bot: H - Math.max(10, SAFE_B) - 104 },
+      shakeX: sh > 0 ? rand(-1, 1) * sh * 16 : 0, shakeY: sh > 0 ? rand(-1, 1) * sh * 10 : 0,
+      rows, items, trail: trailPts, sparks, parts, pops, flies,
+      px, py: PY, light, rad: lightRadius(light, W, e) * (1 - .45 * outFx), amb: (.3 + .64 * pAbs) * (1 - e),
+      blink: inv > 0 && (RM || Math.floor(clock * 14) % 2 === 0), // reduced motion: a steady dim instead of a flicker
+      sweep: won ? lightsOn : 0, out: outFx, got: gotFx, layerFx,
+      hit: hitFx ? { x: hitFx.x, y: hitFx.y, k: hitFx.t / .6 } : null,
+      lowV: running && light < 25 ? (25 - light) / 25 : 0,
+      banner: bn,
+      hud: {
+        show: running || over, top: SAFE_T, m: depthM(), live: running,
+        layer: LAYERS[layerNow].name, light, flash: gotFx, score: totalScore(), docs: frags,
+        // sits above the shell's mode pill (bottom-centre, ~24px tall, 10px above the safe area)
+        hint: running && runTime < 5 ? Math.min(1, (5 - runTime) / 1.2) : 0, hintY: H - Math.max(10, SAFE_B) - 24 - 16,
+      },
+    });
+  }
+
+  // ---------- tutorial demos: small replays drawn with the same helpers, never touching game state ----------
+  const DS = .8; // demos show a slightly zoomed-out slice of the real screen
+  const smooth = k => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
+  const keyed = (keys, u) => {
+    if (u <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      const [t0, v0] = keys[i - 1], [t1, v1] = keys[i];
+      if (u <= t1) return lerp(v0, v1, smooth((u - t0) / (t1 - t0 || 1)));
+    }
+    return keys[keys.length - 1][1];
+  };
+  const demoTrail = (fx, fd, t, py) => Array.from({ length: 22 }, (_, i) => { const tt = Math.max(0, t - i / 60); return { x: fx(tt), y: fd(tt) + py }; });
+  // the lantern's sparks, solved in closed form so a frame depends only on the time
+  function demoSparks(fx, fd, t, py) {
+    const out = [], rate = 34, n0 = Math.floor(t * rate);
+    for (let i = 0; i < 30; i++) {
+      const n = n0 - i; if (n < 0) break;
+      const ts = n / rate, age = t - ts, r1 = hash(n * 1.31), r2 = hash(n * 2.77 + 5), r3 = hash(n * .73 + 9), max = .35 + .5 * r2;
+      if (age < max) out.push({ x: fx(ts) + (r1 - .5) * 10 + (r3 - .5) * 30 * age, y: fd(ts) + py + (r2 - .7) * 8 + (r1 * 38 - 26) * age, life: age, max, s: .8 + 1.3 * r3 });
+    }
+    return out;
+  }
+  // the same burst as the game, solved in closed form so a frame depends only on its age
+  function demoBurst(x, y, age, n, col, sp, seed) {
+    const out = [], kd = -60 * Math.log(.95);
+    for (let i = 0; i < n; i++) {
+      const r1 = mod(Math.sin((i + 1) * 12.9898 + seed * 78.233) * 43758.5453, 1);
+      const r2 = mod(Math.sin((i + 1) * 39.3468 + seed * 11.135) * 24634.6345, 1);
+      const a = i * 2.39996 + seed, life = .4 + .5 * r2, dd = (.3 + .7 * r1) * sp / kd * (1 - Math.exp(-kd * age));
+      if (age < life) out.push({ x: x + Math.cos(a) * dd, y: y + Math.sin(a) * dd, life: life - age, max: .9, size: 1 + 1.6 * r2, col });
+    }
+    return out;
+  }
+  const sceneAt = (m, h) => { // a slice of the shaft, m metres down
+    const year = yearOf(m), pAbs = clamp(m / BOTTOM_M, 0, 1);
+    return { yTop: year, yBot: year - h / YEAR_PX, pAbs, amb: .3 + .64 * pAbs };
+  };
+  function demo(c, w, h, t, build) {
+    const vw = w / DS, vh = h / DS, s = build(vw, vh);
+    const sc = Object.assign({ t, depth: 0, rows: [], items: [], trail: [], parts: [], pops: [], light: 100, blink: false, sweep: 0, banner: null, hud: null }, s);
+    if (sc.dist == null) sc.dist = sc.depth;
+    if (sc.rad == null) sc.rad = lightRadius(sc.light, vw);
+    c.save(); c.scale(DS, DS); render(c, vw, vh, sc); c.restore();
+    if (s.hand) BS.drawHand(c, s.hand.x * DS, s.hand.y * DS, s.hand.down);
+  }
+
+  const TUTORIAL = [
+    {
+      title: 'Slide to steer',
+      text: 'Drag anywhere to steer your light left and right. You fall on your own.',
+      demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
+        const v = 165, py = vh * .4, amp = vw * .17;
+        const hand = tt => vw / 2 + Math.sin(tt * Math.PI / 2) * amp;               // 4 s loop
+        const fx = tt => vw / 2 + Math.sin((tt - .08) * Math.PI / 2) * amp * 1.3;   // follows 1.3x, slightly behind
+        const fd = tt => v * tt;
+        return {
+          ...sceneAt(300, vh), depth: v * t, v,
+          px: fx(t), py, trail: demoTrail(fx, fd, t, py), sparks: demoSparks(fx, fd, t, py),
+          hand: { x: hand(t), y: vh - 44, down: true },
+        };
+      }),
+    },
+    {
+      title: 'Find the gaps',
+      text: 'Walls are legacy systems blocking the way. Steer through the gaps.',
+      demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
+        const L = 3.2, v = 130, py = vh * .4, gw = vw * .42;
+        const gapAt = k => (mod(k, 2) ? .3 : .7) * vw;
+        const fx = tt => { const k = Math.floor(tt / L); return lerp(gapAt(k - 1), gapAt(k), BS.ease((tt - k * L) / 1.1)); };
+        const fd = tt => v * tt;
+        const k = Math.floor(t / L), gc = gapAt(k);
+        const row = { y: v * k * L + vh + 20, h: 34, layer: 1, blocks: [{ x: 0, w: gc - gw / 2 }, { x: gc + gw / 2, w: vw - gc - gw / 2 }] };
+        return {
+          ...sceneAt(1400, vh), depth: v * t, v,
+          px: fx(t), py, trail: demoTrail(fx, fd, t, py), sparks: demoSparks(fx, fd, t, py), rows: [row],
+        };
+      }),
+    },
+    {
+      title: 'Collect documents',
+      text: 'Glowing documents refill your light. Each one is knowledge your AI can now use.',
+      demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
+        const L = 4, v = 140, py = vh * .52, k = Math.floor(t / L), u = t - k * L;
+        const docs = [[.9, .3], [1.9, .68], [2.9, .44]];
+        const keys = [[0, .5], [.55, .3], [.9, .3], [1.45, .68], [1.9, .68], [2.45, .44], [2.9, .44], [3.7, .5]].map(([a, b]) => [a, b * vw]);
+        const fx = tt => keyed(keys, mod(tt, L));
+        const fd = tt => v * tt;
+        let l = 38 - 2.5 * u, got = 0;
+        const its = [], ps = [], pp = [], fl = [];
+        docs.forEach(([tc, fxr], i) => {
+          const x = fxr * vw, age = u - tc;
+          if (age < -.18) { its.push({ x, y: v * (k * L + tc) + py, ph: i * 2 }); return; }
+          if (age < .18) fl.push({ dx: x - fx(t), dy: v * .18, k: (age + .18) / .36 }); // picked up just before it reaches the lantern
+          if (age < 0) return;
+          l += 15 * smooth(age / .3);
+          got = Math.max(got, 1 - age / .6);
+          if (age < 1) {
+            ps.push(...demoBurst(x, py, age, 10, C_PICK, 120, i + 1));
+            pp.push({ x, y: py - 46 - 24 * age, text: '+light', size: 14, color: '#d4f6ff', life: 1 - age });
+          }
+        });
+        return {
+          ...sceneAt(2500, vh), depth: v * t, v,
+          px: fx(t), py, trail: demoTrail(fx, fd, t, py), sparks: demoSparks(fx, fd, t, py),
+          items: its, parts: ps, pops: pp, flies: fl, got, light: l,
+          hud: { show: true, m: 2500 + v * u / YEAR_PX * M_PER_YEAR, live: true, layer: LAYERS[2].name, light: l, flash: got },
+        };
+      }),
+    },
+    {
+      title: 'Watch your light',
+      text: 'Your light fades over time and drops when you hit a wall. When it runs out, your AI goes dark.',
+      demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
+        const L = 5.6, v = 120, py = vh * .52, TH = 1.6, OUT = 4, k = Math.floor(t / L), u = t - k * L;
+        const keys = [[0, .45], [.5, .45], [1.9, .66], [4.4, .66], [5.6, .45]].map(([a, b]) => [a, b * vw]);
+        const fx = tt => keyed(keys, mod(tt, L));
+        const fd = tt => v * (Math.floor(tt / L) * L + Math.min(mod(tt, L), OUT)); // stops falling once dark
+        const hitX = fx(k * L + TH), age = u - TH, hitOn = age >= 0;
+        const l = Math.max(0, 62 - 9 * u - (hitOn ? 26 : 0));
+        const dark = BS.ease((u - OUT - .1) / .7), sh = hitOn ? Math.max(0, .35 - age) * FX : 0;
+        const base = sceneAt(4500, vh), d = fd(t);
+        const m = 4500 + v * Math.min(u, OUT) / YEAR_PX * M_PER_YEAR; // the gauge stops where the light does
+        const row = { y: v * (k * L + TH) + py + PR, h: 34, layer: 4, blocks: [{ x: 0, w: vw * .72 }] };
+        return {
+          ...base, depth: d, v: u < OUT ? v : 0,
+          px: fx(t), py, trail: demoTrail(fx, fd, t, py), sparks: u < OUT ? demoSparks(fx, fd, t, py) : [], rows: [row], light: l,
+          rad: lightRadius(l, vw) * (1 - .45 * dark), out: dark, lowV: u < OUT && l < 25 ? (25 - l) / 25 : 0,
+          blink: hitOn && age < 1.1 && (RM || Math.floor(age * 14) % 2 === 0),
+          shakeX: sh ? Math.sin(t * 91) * sh * 16 : 0, shakeY: sh ? Math.cos(t * 77) * sh * 10 : 0,
+          hit: hitOn && age < .6 ? { x: hitX, y: py, k: age / .6 } : null,
+          parts: hitOn && age < 1 ? demoBurst(hitX, py, age, 14, C_HIT, 200, 7) : [],
+          pops: hitOn && age < 1 ? [{ x: hitX, y: py - 46 - 24 * age, text: '−light', size: 15, color: '#ffab98', life: 1 - age }] : [],
+          banner: dark > 0 ? { m, sub: 'Your AI went dark here', a: dark, y: vh * .72 } : null,
+          hud: { show: true, m, live: u < OUT, layer: LAYERS[4].name, light: l },
+        };
+      }),
+    },
+    {
+      title: 'Reach the bottom',
+      text: 'Each layer goes deeper, faster and darker. Reach the bottom, 6,200\u00A0m down, to switch the lights on.',
+      demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
+        const L = 7, D = 5, DPX = 26, span = START_YEAR - END_YEAR, py = vh * .5, u = mod(t, L);
+        const yr = tt => START_YEAR - span * Math.pow(clamp(mod(tt, L) / D, 0, 1), 1.6); // speeds up as it goes
+        const fd = tt => (START_YEAR - yr(tt)) * DPX - py;
+        const fx = tt => vw / 2 + Math.sin(mod(tt, L) * 1.5) * vw * .05;
+        const year = yr(t), d = fd(t), pAbs = (START_YEAR - year) / span;
+        const rws = [];
+        for (let wy = 150; wy < span * DPX - 60; wy += 110) {
+          const gc = vw / 2 + Math.sin(wy / 110 * 1.7) * vw * .06, gw = vw * .46;
+          rws.push({ y: wy, h: 30, layer: layerIdx(START_YEAR - wy / DPX), blocks: [{ x: 0, w: gc - gw / 2 }, { x: gc + gw / 2, w: vw - gc - gw / 2 }] });
+        }
+        const sweep = clamp((u - D) / 1.5, 0, 1), e = BS.ease(sweep);
+        return {
+          yTop: START_YEAR - d / DPX, yBot: START_YEAR - (d + vh) / DPX, pAbs,
+          depth: d, dist: d * 3, v: u < D ? clamp((d - fd(t - .02)) / .02, 0, 700) : 0,
+          gauge: true, yearPx: DPX, gaugeMin: 104, rail: { top: 108, bot: vh - 20 },
+          px: fx(t), py, trail: demoTrail(fx, fd, t, py), sparks: u < D ? demoSparks(fx, fd, t, py) : [], rows: rws, light: 80,
+          rad: lightRadius(80, vw, e), amb: (.3 + .64 * pAbs) * (1 - e), sweep,
+          parts: sweep > 0 && sweep < .7 ? LAYERS.flatMap((er, i) => demoBurst(vw / 2, py, sweep * 1.5, 9, er.acc, 300, i + 2)) : [],
+          banner: sweep > 0 ? { m: BOTTOM_M, sub: 'Lights on, all the way down', a: smooth(sweep * 3), y: vh * .74, band: .3 } : null,
+          // the whole dive in five seconds: the gauge counts up in 100 m steps through each layer's name
+          hud: { show: true, m: Math.floor(metres(year) / 100) * 100, layer: LAYERS[layerIdx(year)].name, light: 80 },
+        };
+      }),
+    },
+  ];
+
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(.05, (t - last) / 1000); last = t;
+    update(dt); draw();
+    requestAnimationFrame(frame);
+  }
+
+  if (BS.params.has('debug')) window.__dbg = {
+    // depth is the internal scroll offset in px; metres is the depth the player is shown
+    state: () => ({ depth, metres: Math.floor(depthM()), layer: layerNow + 1, layerName: LAYERS[layerNow].name, light, frags, hits, running, over, px }),
+    steer: x => { tx = x; }, rows: () => rows, items: () => items,
+    step: (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); draw(); },
+  };
+  resize();
+  window.addEventListener('resize', resize);
+  nextY = H * .95; lastGapC = W / 2; genUntil(H * 1.6); // scenery behind the start card
+  BS.init({
+    id: 'deep-dive',
+    tagline: 'Most of what your company knows sits below the surface. How deep can your AI see?',
+    tutorial: TUTORIAL,
+    onStart: () => start(), // practice and ranked play the same
+  });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

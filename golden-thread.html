@@ -1,0 +1,1336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Golden Thread</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/common.css?v=13">
+<style>
+  :root {
+    --bg: #081329; --fg: #f3ead6; --accent: #d9b25f; --on-accent: #0b1733;
+    --card: rgba(9, 20, 46, .84); --line: rgba(217, 178, 95, .26); --chip: rgba(217, 178, 95, .08);
+    --input: rgba(255, 255, 255, .04); --scrim: rgba(4, 10, 24, .35); --shadow: 0 24px 70px rgba(0, 0, 0, .55);
+    --font-display: Inter, -apple-system, sans-serif; --display-weight: 700; --display-tracking: -.025em; --font-ui: Inter, -apple-system, sans-serif;
+    --demo-bg: #0c1838;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shared/common.js?v=13"></script>
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const GOLD = '#d9b25f', GOLD_L = '#f6dc98', INK = '#0b1733', RED = '#e0795f';
+  const G_RGB = '255,224,150', E_RGB = '255,128,92'; // glow tints: gold leaf, ember
+  const SERIF = 'Inter, -apple-system, sans-serif'; // one typeface across the set
+  const DURATION = +(BS.params.get('t') || 75);
+  const TYPES = ['contract', 'email', 'invoice', 'ticket', 'customer'];
+  const HUD_H = 84;
+  const TAU = Math.PI * 2;
+  const DPR = Math.min(2, window.devicePixelRatio || 1); // same cap as BS.fit
+  const RM = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const MAX_PARTS = 150;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const backOut = t => { t = clamp(t, 0, 1) - 1; return 1 + 2.70158 * t * t * t + 1.70158 * t * t; };
+  const hr = k => { const s = Math.sin(k * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+  const seeded = s => () => hr(s++ * 1.618 + .37);
+
+  let ctx, W, H, R, bg, hintAt = 0, hudGrad, barGrad, digW = 0;
+  let nodes = [], voids = [], chain = [], trail = [], art = [], flashes = [], parts = [], pops = [];
+  let running = false, over = false, time = 0, clock = 0, score = 0, longest = 0, fulls = 0, connected = 0, lost = 0, warned = 0;
+  let ptr = null, snapped = false, redFlash = 0, spawnCd = 0, voidHinted = false;
+  // display-only state
+  let shown = 0, countHold = 0, scoreBump = 0, worth = null, worthA = 0, worthBump = 0, shake = 0, overT = 0;
+  let breaks = [], rays = [], typeBump = {};
+  let lite = false, slow = 0; // lite: set if the phone can't hold the frame rate; drops the purely decorative layers
+  const par = { x: 0, y: 0 };
+  const flecks = Array.from({ length: 26 }, (_, i) => ({ x: hr(i * 3.1 + .5), y: hr(i * 5.7 + 1), z: .25 + .75 * hr(i * 9.3 + 2), ph: hr(i * 2.2 + 3) * TAU }));
+
+  function resize() {
+    ({ ctx, w: W, h: H } = BS.fit(cv));
+    R = clamp(Math.min(W, H) * 0.056, 18, 27);
+    bg = paintBackground(W, H, cv.width, cv.height);
+    hudGrad = ctx.createLinearGradient(0, 0, 0, HUD_H + 14);
+    hudGrad.addColorStop(0, 'rgba(4,9,24,.94)'); hudGrad.addColorStop(.62, 'rgba(4,9,24,.6)'); hudGrad.addColorStop(1, 'rgba(4,9,24,0)');
+    barGrad = ctx.createLinearGradient(18, 0, W - 18, 0);
+    barGrad.addColorStop(0, '#b98a31'); barGrad.addColorStop(1, GOLD_L);
+    hintAt = hintY();
+    for (const n of nodes) { n.x = clamp(n.x, R, W - R); n.y = clamp(n.y, HUD_H + R, H - R); }
+  }
+  // The start hint sits just above the shell's mode pill at bottom-centre.
+  function hintY() {
+    const pill = document.querySelector('.bs-mode');
+    const top = pill ? pill.getBoundingClientRect().top : H - 34;
+    return Math.min(H - 26, top - 16);
+  }
+
+  // ---------- pre-rendered sprites (glows, medallions, coins, blind-spot layers) ----------
+  const cache = new Map();
+  const cached = (key, make) => { let s = cache.get(key); if (!s) cache.set(key, s = make()); return s; };
+  function sprite(w, h, paint) {
+    const s = document.createElement('canvas');
+    s.width = Math.ceil(w * DPR); s.height = Math.ceil(h * DPR);
+    const x = s.getContext('2d'); x.scale(DPR, DPR);
+    paint(x, w, h);
+    s.cw = w; s.ch = h;
+    return s;
+  }
+  const glowSprite = rgb => cached('glow' + rgb, () => sprite(64, 64, x => {
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, `rgba(${rgb},1)`); g.addColorStop(.22, `rgba(${rgb},.5)`); g.addColorStop(.55, `rgba(${rgb},.12)`); g.addColorStop(1, `rgba(${rgb},0)`);
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  }));
+  // Additive soft light. Multiplies the context's current alpha, then restores it.
+  function glow(c, x, y, r, a, rgb = G_RGB) {
+    if (a <= 0 || r <= 0) return;
+    const pa = c.globalAlpha;
+    c.globalAlpha = pa * Math.min(1, a); c.globalCompositeOperation = 'lighter';
+    c.drawImage(glowSprite(rgb), x - r, y - r, r * 2, r * 2);
+    c.globalAlpha = pa; c.globalCompositeOperation = 'source-over';
+  }
+  function star4(c, x, y, s) {
+    const k = s * .2;
+    c.beginPath();
+    c.moveTo(x, y - s); c.lineTo(x + k, y - k); c.lineTo(x + s, y); c.lineTo(x + k, y + k);
+    c.lineTo(x, y + s); c.lineTo(x - k, y + k); c.lineTo(x - s, y); c.lineTo(x - k, y - k);
+    c.closePath(); c.fill();
+  }
+  const sizeKey = r => Math.round(r * 2) / 2;
+
+  // Unlinked fragment: an engraved medallion on dark enamel.
+  const medalSprite = (type, r) => cached(`m|${type}|${sizeKey(r)}`, () => {
+    const pad = Math.ceil(r * .7), side = 2 * (r + pad), o = side / 2;
+    return sprite(side, side, x => {
+      let g = x.createRadialGradient(o, o, r * .8, o, o, r + pad);
+      g.addColorStop(0, 'rgba(217,178,95,.26)'); g.addColorStop(.45, 'rgba(217,178,95,.07)'); g.addColorStop(1, 'rgba(217,178,95,0)');
+      x.fillStyle = g; circle(x, o, o, r + pad); x.fill();
+      x.fillStyle = 'rgba(2,5,14,.5)'; circle(x, o, o + 2, r + .5); x.fill();
+      g = x.createRadialGradient(o - r * .3, o - r * .45, r * .1, o, o, r);
+      g.addColorStop(0, '#1d3270'); g.addColorStop(.55, '#0e1c44'); g.addColorStop(1, '#070f28');
+      x.fillStyle = g; circle(x, o, o, r); x.fill();
+      const lg = x.createLinearGradient(o - r, o - r, o + r, o + r);
+      lg.addColorStop(0, '#fdeebe'); lg.addColorStop(.45, GOLD); lg.addColorStop(1, '#a07c34');
+      x.strokeStyle = lg; x.lineWidth = 1.7; circle(x, o, o, r - .85); x.stroke();
+      x.strokeStyle = 'rgba(217,178,95,.4)'; x.lineWidth = .8; circle(x, o, o, r * .73); x.stroke();
+      x.strokeStyle = '#fdecb8'; glyph(x, type, o, o, r, Math.max(1.3, r * .078));
+    });
+  });
+  // The fine tick ring that turns slowly inside an unlinked medallion.
+  const tickSprite = r => cached(`t|${sizeKey(r)}`, () => sprite(2 * r, 2 * r, x => {
+    x.translate(r, r); x.lineWidth = .8; x.lineCap = 'butt';
+    for (let i = 0; i < 40; i++) {
+      const a = i / 40 * TAU, long = i % 5 === 0, r0 = r * (long ? .765 : .8), r1 = r * .885;
+      x.strokeStyle = `rgba(232,196,118,${long ? .75 : .42})`;
+      x.beginPath(); x.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); x.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); x.stroke();
+    }
+  }));
+  // Linked fragment: a gold-leaf coin with a specular highlight and a beaded edge.
+  const coinSprite = (type, r) => cached(`c|${type}|${sizeKey(r)}`, () => {
+    const pad = Math.ceil(r * .9), side = 2 * (r + pad), o = side / 2;
+    return sprite(side, side, x => {
+      let g = x.createRadialGradient(o, o, r * .7, o, o, r + pad);
+      g.addColorStop(0, 'rgba(255,208,112,.6)'); g.addColorStop(.4, 'rgba(255,208,112,.18)'); g.addColorStop(1, 'rgba(255,208,112,0)');
+      x.fillStyle = g; circle(x, o, o, r + pad); x.fill();
+      x.fillStyle = 'rgba(2,5,14,.45)'; circle(x, o, o + 2, r + .5); x.fill();
+      g = x.createRadialGradient(o - r * .36, o - r * .44, r * .05, o, o, r * 1.04);
+      g.addColorStop(0, '#fffbe8'); g.addColorStop(.2, '#fbe6a6'); g.addColorStop(.58, '#deb65a'); g.addColorStop(.88, '#b98a31'); g.addColorStop(1, '#8a6520');
+      x.fillStyle = g; circle(x, o, o, r); x.fill();
+      x.save(); circle(x, o, o, r); x.clip();
+      x.lineWidth = .6; // leaf grain: faint diagonal hatching
+      for (let i = -r * 2; i < r * 2; i += 2.6) {
+        x.strokeStyle = `rgba(${hr(i) > .5 ? '255,250,225' : '110,76,16'},${.05 + .07 * hr(i + 9)})`;
+        x.beginPath(); x.moveTo(o + i - r, o + r); x.lineTo(o + i + r, o - r); x.stroke();
+      }
+      g = x.createRadialGradient(o - r * .34, o - r * .5, 0, o - r * .34, o - r * .5, r * .62);
+      g.addColorStop(0, 'rgba(255,255,255,.62)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = g; x.fillRect(o - r, o - r, r * 2, r * 2);
+      x.restore();
+      x.strokeStyle = 'rgba(98,66,12,.75)'; x.lineWidth = 1; circle(x, o, o, r - .5); x.stroke();
+      x.strokeStyle = 'rgba(255,248,220,.65)'; x.lineWidth = .8; circle(x, o, o, r - 2.2); x.stroke();
+      x.fillStyle = 'rgba(112,78,18,.6)';
+      for (let i = 0; i < 30; i++) { const a = i / 30 * TAU; circle(x, o + Math.cos(a) * r * .79, o + Math.sin(a) * r * .79, .65); x.fill(); }
+      const lw = Math.max(1.35, r * .08);
+      x.strokeStyle = 'rgba(255,250,228,.6)'; glyph(x, type, o + .6, o + .9, r * .98, lw);
+      x.strokeStyle = INK; glyph(x, type, o, o, r * .98, lw);
+    });
+  });
+  // Small beads for the type row.
+  const miniSprite = (type, on) => cached(`i|${type}|${on}`, () => sprite(34, 34, x => {
+    const o = 17, r = 10.5;
+    if (on) {
+      let g = x.createRadialGradient(o, o, r * .6, o, o, 17);
+      g.addColorStop(0, 'rgba(255,208,112,.55)'); g.addColorStop(1, 'rgba(255,208,112,0)');
+      x.fillStyle = g; circle(x, o, o, 17); x.fill();
+      g = x.createRadialGradient(o - 3.6, o - 4.4, .5, o, o, r);
+      g.addColorStop(0, '#fffbe8'); g.addColorStop(.3, '#f6dc98'); g.addColorStop(.8, '#cfa247'); g.addColorStop(1, '#9a7426');
+      x.fillStyle = g; circle(x, o, o, r); x.fill();
+      x.strokeStyle = 'rgba(98,66,12,.7)'; x.lineWidth = .8; circle(x, o, o, r - .4); x.stroke();
+      x.strokeStyle = INK; glyph(x, type, o, o, 11.5, 1.25);
+    } else {
+      x.fillStyle = 'rgba(8,17,42,.94)'; circle(x, o, o, r); x.fill();
+      x.strokeStyle = 'rgba(217,178,95,.55)'; x.lineWidth = 1; circle(x, o, o, r - .5); x.stroke();
+      x.strokeStyle = 'rgba(246,220,152,.7)'; glyph(x, type, o, o, 11, 1.1);
+    }
+  }));
+
+  // Blind spot layers, painted once at a reference radius and scaled per blind spot.
+  const VR = 64, VS = VR * 3.3;
+  const voidCore = () => cached('vcore', () => sprite(VS, VS, x => {
+    const o = VS / 2;
+    let g = x.createRadialGradient(o, o, VR * .7, o, o, VR * 1.62);
+    g.addColorStop(0, 'rgba(1,2,8,.96)'); g.addColorStop(.4, 'rgba(2,3,10,.6)'); g.addColorStop(.7, 'rgba(3,5,14,.22)'); g.addColorStop(1, 'rgba(3,5,14,0)');
+    x.fillStyle = g; circle(x, o, o, VR * 1.62); x.fill();
+    g = x.createRadialGradient(o, o, 0, o, o, VR);
+    g.addColorStop(0, '#000003'); g.addColorStop(.62, '#03020a'); g.addColorStop(1, '#0d0716');
+    x.fillStyle = g; circle(x, o, o, VR); x.fill();
+    g = x.createRadialGradient(o, o, VR * .86, o, o, VR * 1.14);
+    g.addColorStop(0, 'rgba(226,96,64,0)'); g.addColorStop(.5, 'rgba(238,114,80,.4)'); g.addColorStop(1, 'rgba(226,96,64,0)');
+    x.fillStyle = g; circle(x, o, o, VR * 1.14); x.fill();
+  }));
+  const voidArms = () => cached('varms', () => sprite(VR * 2, VR * 2, x => {
+    x.translate(VR, VR); x.lineCap = 'round';
+    const g = x.createRadialGradient(0, 0, VR * .06, 0, 0, VR * .92);
+    g.addColorStop(0, 'rgba(150,140,240,0)'); g.addColorStop(.45, 'rgba(142,136,236,.3)'); g.addColorStop(1, 'rgba(172,152,246,.52)');
+    x.strokeStyle = g;
+    for (const [lw, a] of [[3.4, .3], [1.1, 1]]) {
+      x.lineWidth = lw; x.globalAlpha = a;
+      for (let arm = 0; arm < 7; arm++) {
+        x.beginPath();
+        for (let s = 0; s <= 44; s++) {
+          const u = s / 44, r = VR * (.07 + .83 * u), t = arm / 7 * TAU + u * 3.9;
+          s ? x.lineTo(Math.cos(t) * r, Math.sin(t) * r) : x.moveTo(Math.cos(t) * r, Math.sin(t) * r);
+        }
+        x.stroke();
+      }
+    }
+  }));
+  const voidRings = () => cached('vrings', () => sprite(VR * 2, VR * 2, x => {
+    x.translate(VR, VR); x.lineCap = 'round';
+    for (const [rad, n, rgb, a, lw] of [[.85, 5, '196,176,250', .3, 1.1], [.63, 4, '170,150,245', .4, 1.2], [.4, 3, '170,150,245', .34, 1.1]]) {
+      x.strokeStyle = `rgba(${rgb},${a})`; x.lineWidth = lw;
+      for (let j = 0; j < n; j++) { const a0 = j / n * TAU + rad * 5; x.beginPath(); x.arc(0, 0, VR * rad, a0, a0 + TAU / n * .6); x.stroke(); }
+    }
+  }));
+  const voidWisps = () => cached('vwisps', () => sprite(VS, VS, x => {
+    x.translate(VS / 2, VS / 2); x.lineCap = 'round';
+    for (let w = 0; w < 9; w++) {
+      const a0 = w / 9 * TAU + hr(w) * .4, reach = 1.28 + .3 * hr(w + 4);
+      for (let s = 0; s < 14; s++) {
+        const u0 = s / 14, u1 = (s + 1) / 14, r0 = VR * (.97 + (reach - .97) * u0), r1 = VR * (.97 + (reach - .97) * u1), t0 = a0 + u0 * 1.25, t1 = a0 + u1 * 1.25;
+        x.strokeStyle = `rgba(2,3,10,${.6 * (1 - u0)})`; x.lineWidth = 10 * (1 - u0) + 1;
+        x.beginPath(); x.moveTo(Math.cos(t0) * r0, Math.sin(t0) * r0); x.lineTo(Math.cos(t1) * r1, Math.sin(t1) * r1); x.stroke();
+        if (w % 3 === 0) {
+          x.strokeStyle = `rgba(236,122,90,${.34 * (1 - u0)})`; x.lineWidth = 1;
+          x.beginPath(); x.moveTo(Math.cos(t0) * r0, Math.sin(t0) * r0); x.lineTo(Math.cos(t1) * r1, Math.sin(t1) * r1); x.stroke();
+        }
+      }
+    }
+  }));
+  const sheenSprite = () => cached('sheen', () => sprite(96, 2, x => {
+    const g = x.createLinearGradient(0, 0, 96, 0);
+    g.addColorStop(0, 'rgba(255,236,190,0)'); g.addColorStop(.5, 'rgba(255,236,190,.075)'); g.addColorStop(1, 'rgba(255,236,190,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 96, 2);
+  }));
+  const dimSprite = () => cached('dim', () => sprite(64, 64, x => {
+    const g = x.createRadialGradient(32, 32, 8, 32, 32, 46);
+    g.addColorStop(0, 'rgba(120,24,14,.04)'); g.addColorStop(.5, 'rgba(150,34,22,.26)'); g.addColorStop(1, 'rgba(196,56,38,.9)');
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  }));
+
+  // ---------- background ----------
+  // A guilloche rosette: bands of interlaced sine waves wrapped round a circle, as on a banknote.
+  function rosette(x, cx, cy, rad, lobes, a) {
+    x.lineWidth = .6;
+    for (const [ri, ro, n, lines] of [[.6, 1, lobes, 8], [.34, .58, Math.round(lobes * .67), 6], [.12, .32, Math.round(lobes * .42), 5]]) {
+      const mid = (ri + ro) / 2 * rad, amp = (ro - ri) / 2 * rad, steps = n * 28;
+      for (let j = 0; j < lines; j++) {
+        x.strokeStyle = `rgba(217,178,95,${a * (j % 2 ? 1 : .7)})`;
+        x.beginPath();
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps * TAU, r = mid + amp * Math.sin(n * t + j / lines * TAU);
+          s ? x.lineTo(cx + Math.cos(t) * r, cy + Math.sin(t) * r) : x.moveTo(cx + Math.cos(t) * r, cy + Math.sin(t) * r);
+        }
+        x.stroke();
+      }
+    }
+    x.strokeStyle = `rgba(217,178,95,${a * 1.5})`;
+    circle(x, cx, cy, rad * 1.035); x.stroke(); circle(x, cx, cy, rad * .59); x.stroke(); circle(x, cx, cy, rad * .33); x.stroke();
+  }
+  // Navy "engraved paper": wash, guilloche rosettes, star-chart rings, fixed stars, grain and a vignette. Painted once per size.
+  function paintBackground(w, h, pw, ph) {
+    const g = document.createElement('canvas');
+    g.width = pw; g.height = ph;
+    const x = g.getContext('2d');
+    x.scale(pw / w, ph / h);
+    const m = Math.min(w, h), M = Math.max(w, h), cx = w * .5, cy = h * .47;
+    let grd = x.createRadialGradient(w * .5, h * .34, 0, w * .5, h * .52, M * .86);
+    grd.addColorStop(0, '#1b3072'); grd.addColorStop(.42, '#0f1e49'); grd.addColorStop(.8, '#08122b'); grd.addColorStop(1, '#040919');
+    x.fillStyle = grd; x.fillRect(0, 0, w, h);
+    grd = x.createRadialGradient(cx, cy, 0, cx, cy, m * .72);
+    grd.addColorStop(0, 'rgba(217,178,95,.075)'); grd.addColorStop(1, 'rgba(217,178,95,0)');
+    x.fillStyle = grd; x.fillRect(0, 0, w, h);
+    // flowing engraved lines across the lower half
+    x.lineWidth = .7;
+    for (let k = 0; k < 14; k++) {
+      x.strokeStyle = `rgba(217,178,95,${0.018 + (k % 3) * 0.007})`;
+      x.beginPath();
+      for (let t = 0; t <= w + 6; t += 6) {
+        const y = h * .68 + Math.sin(t / w * Math.PI * 1.6 + k * .38) * h * .15 + Math.sin(t / w * Math.PI * 5 + k) * 8 + (k - 7) * 9;
+        t ? x.lineTo(t, y) : x.moveTo(t, y);
+      }
+      x.stroke();
+    }
+    // rosettes: one large in the middle, two bleeding off opposite corners for depth
+    rosette(x, cx, cy, m * .43, 18, .062);
+    rosette(x, w * 1.02, h * .08, m * .4, 14, .046);
+    rosette(x, -w * .04, h * .95, m * .46, 16, .046);
+    // star-chart furniture round the main rosette: a graduated ring, meridians, two great circles
+    const r1 = m * .5;
+    x.lineWidth = .7;
+    x.strokeStyle = 'rgba(217,178,95,.085)'; circle(x, cx, cy, r1); x.stroke();
+    for (let i = 0; i < 72; i++) {
+      const a = i / 72 * TAU, long = i % 6 === 0, r0 = r1 - (long ? 7 : 3.5);
+      x.strokeStyle = `rgba(217,178,95,${long ? .16 : .09})`;
+      x.beginPath(); x.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); x.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); x.stroke();
+    }
+    x.strokeStyle = 'rgba(217,178,95,.035)';
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * TAU + .13;
+      x.beginPath(); x.moveTo(cx + Math.cos(a) * r1 * 1.04, cy + Math.sin(a) * r1 * 1.04); x.lineTo(cx + Math.cos(a) * M, cy + Math.sin(a) * M); x.stroke();
+    }
+    x.strokeStyle = 'rgba(217,178,95,.05)';
+    circle(x, cx - m * .5, cy + M * .62, M * .82); x.stroke();
+    circle(x, cx + m * .62, cy - M * .5, M * .74); x.stroke();
+    // fixed stars
+    for (let i = 0; i < Math.round(w * h / 4200); i++) {
+      const sx = hr(i * 1.7 + 11) * w, sy = hr(i * 2.9 + 23) * h, b = hr(i * 4.3 + 5);
+      x.fillStyle = `rgba(255,238,200,${.1 + .32 * b * b})`;
+      circle(x, sx, sy, .45 + .7 * b * b); x.fill();
+      if (b > .9) { x.fillStyle = 'rgba(255,238,200,.3)'; star4(x, sx, sy, 3.6); }
+    }
+    // paper grain
+    for (let i = 0; i < w * h / 40; i++) {
+      x.fillStyle = `rgba(255,236,200,${Math.random() * .04})`;
+      x.fillRect(Math.random() * w, Math.random() * h, 1, 1);
+    }
+    // vignette
+    grd = x.createRadialGradient(w / 2, h / 2, m * .42, w / 2, h / 2, Math.hypot(w, h) * .56);
+    grd.addColorStop(0, 'rgba(2,4,12,0)'); grd.addColorStop(1, 'rgba(2,4,12,.62)');
+    x.fillStyle = grd; x.fillRect(0, 0, w, h);
+    return g;
+  }
+  // Live layers over the paper: a slow sheen and drifting gold flecks with a little parallax.
+  function drawAmbient() {
+    const t = RM ? 0 : clock;
+    if (!RM && !lite) {
+      const u = (clock % 16) / 8.5;
+      if (u < 1) {
+        const bw = W * .8;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.sin(Math.PI * u);
+        ctx.translate(-bw + (W + bw * 2) * u, H / 2); ctx.rotate(-.38);
+        ctx.drawImage(sheenSprite(), -bw / 2, -H * .8, bw, H * 1.6);
+        ctx.restore();
+      }
+    }
+    ctx.fillStyle = GOLD_L;
+    for (const f of flecks) {
+      const x = f.x * W + Math.sin(t * .12 + f.ph) * 16 * f.z + par.x * f.z * 12;
+      const y = (((f.y - t * .007 * f.z) % 1) + 1) % 1 * (H + 20) - 10 + par.y * f.z * 12;
+      const a = (.1 + .36 * f.z * f.z) * (RM ? .8 : .6 + .4 * Math.sin(t * 1.3 + f.ph * 3));
+      ctx.globalAlpha = a;
+      circle(ctx, x, y, .5 + f.z); ctx.fill();
+      if (f.z > .78 && !lite) { ctx.globalAlpha = 1; glow(ctx, x, y, 7, a * .55); }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- spawning ----------
+  function pickType() {
+    const counts = TYPES.map(t => nodes.filter(n => n.type === t).length);
+    const min = Math.min(...counts);
+    if (Math.random() < .65) {
+      const opts = TYPES.filter((t, i) => counts[i] === min);
+      return opts[Math.floor(Math.random() * opts.length)];
+    }
+    return TYPES[Math.floor(Math.random() * TYPES.length)];
+  }
+  function spawnNode(delay = 0) {
+    for (let i = 0; i < 40; i++) {
+      const x = rand(R + 14, W - R - 14), y = rand(HUD_H + R + 6, H - R - 24);
+      if (nodes.some(n => Math.hypot(n.x - x, n.y - y) < R * 3.1)) continue;
+      if (voids.some(v => Math.hypot(v.x - x, v.y - y) < v.r + R * 2)) continue;
+      if (ptr && Math.hypot(ptr.x - x, ptr.y - y) < R * 2.5) continue;
+      const a = rand(0, Math.PI * 2), s = rand(5, 14);
+      nodes.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, type: pickType(), age: -delay, linked: false, pulse: 0, ph: rand(0, 6) });
+      return;
+    }
+  }
+  function spawnVoid() {
+    const r = clamp(Math.min(W, H) * rand(.085, .12), 30, 58);
+    for (let i = 0; i < 40; i++) {
+      const x = rand(r, W - r), y = rand(HUD_H + r, H - r);
+      if (ptr && Math.hypot(ptr.x - x, ptr.y - y) < r + 150) continue;
+      if (voids.some(v => Math.hypot(v.x - x, v.y - y) < v.r + r + 40)) continue;
+      const a = rand(0, Math.PI * 2), s = rand(16, 30);
+      voids.push({ x, y, r, vx: Math.cos(a) * s, vy: Math.sin(a) * s, age: 0, rot: rand(0, 6) });
+      if (!voidHinted) { voidHinted = true; pop(x, y - r - 18, 'Blind spot · keep clear', 15, '#ffb39e', 2.2); }
+      return;
+    }
+  }
+
+  // ---------- input ----------
+  const pos = e => ({ x: e.clientX, y: e.clientY });
+  cv.addEventListener('pointerdown', e => {
+    if (!running || ptr) return;
+    ptr = { id: e.pointerId, ...pos(e) };
+    snapped = false; chain = []; trail = [pos(e)];
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    touch(ptr.x, ptr.y);
+    if (!chain.length && !snapped) BS.sfx('tap');
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+    for (const ev of evs) {
+      const q = pos(ev);
+      const d = Math.hypot(q.x - ptr.x, q.y - ptr.y), steps = Math.max(1, Math.ceil(d / (R * .5)));
+      for (let i = 1; i <= steps && !snapped; i++) touch(ptr.x + (q.x - ptr.x) * i / steps, ptr.y + (q.y - ptr.y) * i / steps);
+      ptr.x = q.x; ptr.y = q.y;
+      if (!snapped) { trail.push(q); if (trail.length > 50) trail.shift(); }
+    }
+  });
+  const release = e => {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    ptr = null;
+    if (running && !snapped) bank(); else unlinkAll();
+    chain = []; trail = [];
+  };
+  cv.addEventListener('pointerup', release);
+  cv.addEventListener('pointercancel', release);
+
+  function touch(x, y) {
+    for (const v of voids) if (v.age > 1.2 && Math.hypot(v.x - x, v.y - y) < v.r * .9) return snap(x, y);
+    for (const n of nodes) {
+      if (n.linked || n.age < .25) continue;
+      if (Math.hypot(n.x - x, n.y - y) < R + 9) link(n);
+    }
+  }
+  function link(n) {
+    n.linked = true; n.pulse = 1; chain.push(n);
+    trail = [{ x: n.x, y: n.y }];
+    burst(n.x, n.y, 7, GOLD_L, 90);
+    BS.sfx('link', { n: chain.length });
+    if (!chain.full && new Set(chain.map(c => c.type)).size === 5) {
+      chain.full = true;
+      pop(n.x, n.y - R - 16, 'Full picture', 18, GOLD_L);
+    }
+    BS.vibrate(6);
+    // display only: light the bead for this kind and nudge the live readout
+    if (chain.filter(c => c.type === n.type).length === 1) typeBump[n.type] = 1;
+    worthBump = 1;
+  }
+  function unlinkAll() { for (const n of chain) n.linked = false; }
+  function snap(x, y) {
+    snapped = true; redFlash = .35;
+    if (chain.length >= 2) lost++; // a thread is two or more linked fragments, same as bank()
+    const pts = resample([...chain.map(c => ({ x: c.x, y: c.y })), ...trail], 14, 44);
+    breaks.push({ list: shardSpec(pts, Math.random), t0: clock });
+    for (const q of emberSpec(pts, Math.random)) addPart(q);
+    for (const c of chain) c.shock = 1;
+    if (!RM) shake = .3;
+    unlinkAll(); chain = []; trail = [];
+    pop(x, y - 34, 'Lost in a blind spot', 17, '#ff9a80');
+    BS.sfx('snap');
+    BS.vibrate(70);
+  }
+  function bank() {
+    if (chain.length < 2) { unlinkAll(); return; }
+    const n = chain.length, full = new Set(chain.map(c => c.type)).size === 5;
+    const pts = 10 * n * n * (full ? 2 : 1);
+    score += pts; connected += n; longest = Math.max(longest, n); if (full) fulls++;
+    const path = chain.map(c => ({ x: c.x, y: c.y }));
+    art.push(path); flashes.push({ pts: path, life: .9 });
+    const last = chain[chain.length - 1];
+    pop(last.x, last.y - R - 12, '+' + BS.fmt(pts), n >= 6 ? 34 : 24, GOLD_L);
+    if (full) {
+      pops = pops.filter(q => q.text !== 'Full picture'); // the banked title replaces the one shown while dragging
+      pop(last.x, last.y - R - 50, 'Full picture ×2', 19, GOLD_L, 1.5, true);
+    }
+    const per = Math.max(3, Math.min(7, Math.floor(72 / n)));
+    for (const c of chain) { burst(c.x, c.y, 6, GOLD_L, 140); dust(c.x, c.y, per); c.dead = true; }
+    nodes = nodes.filter(c => !c.dead);
+    if (full) rays.push({ x: last.x, y: last.y, life: 1.1, max: 1.1 });
+    if (countHold <= 0) countHold = .4;
+    BS.sfx('bank', { n });
+    if (full) BS.sfx('full');
+    BS.vibrate(15);
+  }
+
+  // ---------- effects ----------
+  function addPart(q) {
+    if (parts.length >= MAX_PARTS) parts.shift();
+    parts.push(q);
+  }
+  function burst(x, y, n, color, sp) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(.3, 1) * sp;
+      addPart({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(.4, .8), max: .8, size: rand(1, 2.4), color, g: 0 });
+    }
+  }
+  // Gold dust that swings out from a banked fragment, then streams to the score.
+  function dust(x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), d = rand(30, 95);
+      addPart({ dust: true, x, y, px: x, py: y, x0: x, y0: y, cx: x + Math.cos(a) * d, cy: y + Math.sin(a) * d, t: -rand(0, .12), dur: rand(.55, .95), size: rand(.9, 1.9), life: 1, max: 1 });
+    }
+  }
+  function pop(x, y, text, size, color, life = 1.2, it = false) {
+    pops.push({ x: clamp(x, 90, W - 90), y: Math.max(HUD_H + 10, y), text, size, color, life, max: life, it });
+  }
+  // Even samples along a polyline, so a broken thread shatters into pieces of similar length.
+  function resample(pts, step, maxN) {
+    let total = 0;
+    const seg = [];
+    for (let i = 0; i < pts.length - 1; i++) { const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y); seg.push(d); total += d; }
+    if (total < 4) return [];
+    const n = Math.min(maxN, Math.max(1, Math.round(total / step))), out = [];
+    let i = 0, acc = 0;
+    for (let k = 0; k <= n; k++) {
+      const s = total * k / n;
+      while (i < seg.length - 1 && acc + seg[i] < s) acc += seg[i++];
+      const f = seg[i] ? clamp((s - acc) / seg[i], 0, 1) : 0;
+      out.push({ x: pts[i].x + (pts[i + 1].x - pts[i].x) * f, y: pts[i].y + (pts[i + 1].y - pts[i].y) * f });
+    }
+    return out;
+  }
+  function shardSpec(pts, rnd) {
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      out.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, len: Math.hypot(b.x - a.x, b.y - a.y) * .76, ang: Math.atan2(b.y - a.y, b.x - a.x), vx: (rnd() - .5) * 56, vy: -24 + rnd() * 50, w: (rnd() - .5) * 6, life: .55 + rnd() * .5 });
+    }
+    return out;
+  }
+  function emberSpec(pts, rnd) {
+    const out = [];
+    for (let i = 0; i < pts.length; i += 2) out.push({ x: pts[i].x, y: pts[i].y, vx: -30 + 60 * rnd(), vy: -20 + 60 * rnd(), life: .6 + .5 * rnd(), max: 1.1, size: 1 + 1.2 * rnd(), color: RED, g: 160 });
+    return out;
+  }
+
+  // ---------- game flow ----------
+  function start() {
+    nodes = []; voids = []; art = []; flashes = []; parts = []; pops = []; chain = []; trail = [];
+    ptr = null; snapped = false; time = 0; score = 0; longest = 0; fulls = 0; connected = 0; lost = 0; warned = 0;
+    over = false; voidHinted = false;
+    shown = 0; countHold = 0; scoreBump = 0; worth = null; worthA = 0; shake = 0; overT = 0; breaks = []; rays = []; typeBump = {};
+    hintAt = hintY();
+    running = true;
+    for (let i = 0; i < 11; i++) spawnNode(i * .06);
+  }
+  // One plain-English line for the end screen, built from this round's stats.
+  function themeLine(s) {
+    const pl = BS.pl;
+    if (!s.connected) {
+      if (s.lost) return `You lost ${pl(s.lost, 'thread')} to blind spots and banked none, so your AI never got a connected view.`;
+      return 'No fragments were connected this round. On their own, fragments give your AI nothing to go on.';
+    }
+    const base = `You connected ${pl(s.connected, 'fragment')} into one view` + (s.pictures ? ` and built ${pl(s.pictures, 'full picture')}` : '');
+    if (!s.lost) return `${base}, with every thread kept clear of blind spots.`;
+    return `${base}, but ${pl(s.lost, 'thread was', 'threads were')} lost to blind spots.`;
+  }
+  function end() {
+    running = false; over = true;
+    if (ptr && !snapped) bank();
+    ptr = null; chain = []; trail = []; voids = [];
+    const stats = { connected, longest, pictures: fulls, lost };
+    const prev = BS.best('golden-thread');
+    setTimeout(() => BS.finish({
+      score,
+      headline: 'Time',
+      theme: themeLine(stats),
+      stats,
+      win: score > 0 && (prev == null || score > prev),
+    }), 900);
+  }
+
+  function update(dt) {
+    clock += dt;
+    if (running) {
+      time += dt;
+      const left = Math.ceil(DURATION - time);
+      if (left <= 5 && left >= 1 && left !== warned) { warned = left; BS.sfx('warn'); }
+      if (time >= DURATION) end();
+    }
+    const p = running ? time / DURATION : 0;
+    const nodeTarget = 11 + Math.floor(p * 5);
+    const voidTarget = running ? (time < 5 ? 0 : 1 + Math.floor(p * 3.2)) : 0;
+    spawnCd -= dt;
+    if (!over && nodes.length < nodeTarget && spawnCd <= 0) { spawnNode(); spawnCd = .12; }
+    if (voids.length < voidTarget) spawnVoid();
+
+    const speed = 1 + p * .8;
+    for (const n of nodes) {
+      n.age += dt; n.pulse = Math.max(0, n.pulse - dt * 2.2);
+      if (n.shock) n.shock = Math.max(0, n.shock - dt * 2.4);
+      if (n.linked) continue;
+      n.x += n.vx * dt * speed; n.y += n.vy * dt * speed;
+      if (n.x < R + 6) { n.x = R + 6; n.vx = Math.abs(n.vx); }
+      if (n.x > W - R - 6) { n.x = W - R - 6; n.vx = -Math.abs(n.vx); }
+      if (n.y < HUD_H + R) { n.y = HUD_H + R; n.vy = Math.abs(n.vy); }
+      if (n.y > H - R - 16) { n.y = H - R - 16; n.vy = -Math.abs(n.vy); }
+      for (const v of voids) {
+        const dx = n.x - v.x, dy = n.y - v.y, d = Math.hypot(dx, dy) || 1, m = v.r + R + 4;
+        if (d < m) {
+          n.x = v.x + dx / d * m; n.y = v.y + dy / d * m;
+          const dot = (n.vx * dx + n.vy * dy) / d;
+          if (dot < 0) { n.vx -= 2 * dot * dx / d; n.vy -= 2 * dot * dy / d; }
+        }
+      }
+    }
+    for (const v of voids) {
+      v.age += dt; v.rot += dt * .7;
+      v.x += v.vx * dt * speed; v.y += v.vy * dt * speed;
+      if (v.x < v.r) { v.x = v.r; v.vx = Math.abs(v.vx); }
+      if (v.x > W - v.r) { v.x = W - v.r; v.vx = -Math.abs(v.vx); }
+      if (v.y < HUD_H + v.r * .5) { v.y = HUD_H + v.r * .5; v.vy = Math.abs(v.vy); }
+      if (v.y > H - v.r) { v.y = H - v.r; v.vy = -Math.abs(v.vy); }
+      if (ptr && !snapped && v.age > 1.2 && Math.hypot(v.x - ptr.x, v.y - ptr.y) < v.r * .9) snap(ptr.x, ptr.y);
+    }
+    for (const q of parts) {
+      if (q.dust) {
+        q.t += dt;
+        const k = clamp(q.t / q.dur, 0, 1), e = k * k * (1.6 - .6 * k), u = 1 - e;
+        q.px = q.x; q.py = q.y;
+        q.x = u * u * q.x0 + 2 * u * e * q.cx + e * e * 36; q.y = u * u * q.y0 + 2 * u * e * q.cy + e * e * 36;
+        if (k >= 1) { q.life = 0; scoreBump = 1; }
+        continue;
+      }
+      q.life -= dt; q.vx *= .96; q.vy = q.vy * .96 + q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt;
+    }
+    parts = parts.filter(q => q.life > 0);
+    for (const q of pops) { q.life -= dt; q.y -= 26 * dt; }
+    pops = pops.filter(q => q.life > 0);
+    for (const f of flashes) f.life -= dt;
+    flashes = flashes.filter(f => f.life > 0);
+    redFlash = Math.max(0, redFlash - dt);
+
+    // display only: score count-up, live thread value, shake, parallax
+    for (const q of rays) q.life -= dt;
+    if (rays.length) rays = rays.filter(q => q.life > 0);
+    if (breaks.length) breaks = breaks.filter(b => clock - b.t0 < 1.1);
+    if (shown !== score) {
+      if (countHold > 0 && running) countHold -= dt;
+      else { const d = score - shown; shown = Math.abs(d) < 1 ? score : shown + d * Math.min(1, dt * 7); }
+    }
+    scoreBump = Math.max(0, scoreBump - dt * 3.2);
+    worthBump = Math.max(0, worthBump - dt * 4);
+    for (const t of TYPES) if (typeBump[t]) typeBump[t] = Math.max(0, typeBump[t] - dt * 3.5);
+    const live = chain.length >= 2;
+    if (live) worth = { n: chain.length, full: !!chain.full };
+    worthA = clamp(worthA + (live ? dt * 7 : -dt * 3), 0, 1);
+    shake = Math.max(0, shake - dt);
+    if (over) overT += dt;
+    const tx = ptr && !RM ? (ptr.x / W - .5) * 2 : 0, ty = ptr && !RM ? (ptr.y / H - .5) * 2 : 0, f = Math.min(1, dt * 2.5);
+    par.x += (tx - par.x) * f; par.y += (ty - par.y) * f;
+  }
+
+  // ---------- drawing (every helper takes the context, so the tutorial demos reuse them) ----------
+  function polyline(c, pts) {
+    if (pts.length < 2) return;
+    c.beginPath(); c.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+    c.stroke();
+  }
+  function smooth(c, pts) {
+    if (pts.length < 2) return;
+    c.beginPath(); c.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i].x + pts[i + 1].x) / 2, my = (pts[i].y + pts[i + 1].y) / 2;
+      c.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+    }
+    const l = pts[pts.length - 1]; c.lineTo(l.x, l.y); c.stroke();
+  }
+  function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); }
+  // The point s pixels along a polyline, or null past its end.
+  function along(pts, s) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (s <= d) { const f = d ? s / d : 0; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
+      s -= d;
+    }
+    return null;
+  }
+  function pathLen(pts) {
+    let t = 0;
+    for (let i = 0; i < pts.length - 1; i++) t += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    return t;
+  }
+
+  // Engraving-style document glyphs, drawn with the current strokeStyle.
+  function glyph(c, type, x, y, s, lw) {
+    const h = s / 2;
+    c.save(); c.translate(x, y);
+    c.lineWidth = lw || Math.max(1.1, s * .07); c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath();
+    switch (type) {
+      case 'contract':
+        c.moveTo(-h * .6, -h * .82); c.lineTo(h * .28, -h * .82); c.lineTo(h * .6, -h * .5); c.lineTo(h * .6, h * .82); c.lineTo(-h * .6, h * .82); c.closePath();
+        c.moveTo(h * .28, -h * .82); c.lineTo(h * .28, -h * .5); c.lineTo(h * .6, -h * .5);
+        c.moveTo(-h * .34, -h * .28); c.lineTo(h * .34, -h * .28);
+        c.moveTo(-h * .34, h * .02); c.lineTo(h * .34, h * .02);
+        c.moveTo(-h * .34, h * .5); c.quadraticCurveTo(-h * .12, h * .22, 0, h * .48); c.quadraticCurveTo(h * .14, h * .68, h * .36, h * .4);
+        break;
+      case 'email':
+        c.rect(-h * .82, -h * .56, h * 1.64, h * 1.12);
+        c.moveTo(-h * .82, -h * .56); c.lineTo(0, h * .12); c.lineTo(h * .82, -h * .56);
+        break;
+      case 'invoice': {
+        c.moveTo(-h * .56, -h * .82); c.lineTo(h * .56, -h * .82); c.lineTo(h * .56, h * .7);
+        const z = 5; for (let i = 0; i <= z; i++) c.lineTo(h * .56 - (h * 1.12) * i / z, h * (i % 2 ? .88 : .7));
+        c.closePath();
+        c.moveTo(-h * .3, -h * .46); c.lineTo(h * .3, -h * .46);
+        c.moveTo(-h * .3, -h * .14); c.lineTo(h * .3, -h * .14);
+        c.moveTo(0, h * .2); c.lineTo(h * .3, h * .2);
+        break;
+      }
+      case 'ticket':
+        c.moveTo(-h * .8, -h * .6); c.lineTo(h * .8, -h * .6); c.lineTo(h * .8, h * .34); c.lineTo(-h * .1, h * .34);
+        c.lineTo(-h * .5, h * .78); c.lineTo(-h * .5, h * .34); c.lineTo(-h * .8, h * .34); c.closePath();
+        c.moveTo(-h * .46, -h * .26); c.lineTo(h * .46, -h * .26);
+        c.moveTo(-h * .46, h * .02); c.lineTo(h * .2, h * .02);
+        break;
+      case 'customer':
+        c.arc(0, -h * .3, h * .32, 0, Math.PI * 2);
+        c.moveTo(-h * .7, h * .82); c.quadraticCurveTo(-h * .66, h * .14, 0, h * .14); c.quadraticCurveTo(h * .66, h * .14, h * .7, h * .82);
+        break;
+    }
+    c.stroke(); c.restore();
+  }
+
+  function spin(c, img, x, y, d, ang) {
+    c.save(); c.translate(x, y); c.rotate(ang); c.drawImage(img, -d / 2, -d / 2, d, d); c.restore();
+  }
+  // v = { x, y, r, age, rot }. Under 1.2 s it is forming (a warning outline); after that it is dangerous.
+  function drawVoid(c, v, clk) {
+    const k = clamp(v.age / 1.2, 0, 1), e = BS.ease(k), sc = v.r / VR;
+    if (k < 1) {
+      // forming: a hollow, blinking ember reticle marks where it will be, while the ink wells up inside
+      const blink = RM ? .7 : .5 + .5 * Math.sin(clk * 12);
+      c.fillStyle = `rgba(232,96,64,${.05 + .06 * blink})`; circle(c, v.x, v.y, v.r); c.fill();
+      const d = VS * sc * (.3 + .7 * e);
+      c.globalAlpha = .3 + .5 * k; c.drawImage(voidCore(), v.x - d / 2, v.y - d / 2, d, d);
+      c.globalAlpha = k * .7; spin(c, voidArms(), v.x, v.y, VR * 2 * sc * (.3 + .7 * e), v.rot * .9);
+      c.globalAlpha = 1;
+      c.lineCap = 'butt';
+      c.strokeStyle = `rgba(255,156,124,${.4 + .55 * blink})`; c.lineWidth = 1.7;
+      c.setLineDash([5, 6]); c.lineDashOffset = RM ? 0 : -clk * 16;
+      circle(c, v.x, v.y, v.r); c.stroke();
+      c.setLineDash([]); c.lineDashOffset = 0;
+      c.strokeStyle = `rgba(255,156,124,${.55 * (1 - k) + .12})`; c.lineWidth = 1;
+      circle(c, v.x, v.y, v.r * (1.6 - .6 * e)); c.stroke();
+      c.strokeStyle = 'rgba(255,170,140,.85)'; c.lineWidth = 1.4;
+      c.beginPath();
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; c.moveTo(v.x + Math.cos(a) * (v.r - 3), v.y + Math.sin(a) * (v.r - 3)); c.lineTo(v.x + Math.cos(a) * (v.r + 6), v.y + Math.sin(a) * (v.r + 6)); }
+      c.stroke();
+      return;
+    }
+    // dangerous: ink-dark vortex, counter-rotating rings, ember rim, wisps and a few embers falling in
+    spin(c, voidWisps(), v.x, v.y, VS * sc, v.rot * .22);
+    const d = VS * sc;
+    c.drawImage(voidCore(), v.x - d / 2, v.y - d / 2, d, d);
+    spin(c, voidArms(), v.x, v.y, VR * 2 * sc, v.rot * .9);
+    spin(c, voidRings(), v.x, v.y, VR * 2 * sc, -v.rot * .55);
+    c.strokeStyle = `rgba(255,150,116,${.72 + .16 * Math.sin(clk * 2.2 + v.r)})`; c.lineWidth = 1.5;
+    circle(c, v.x, v.y, v.r); c.stroke();
+    c.fillStyle = '#ffb08c';
+    for (let i = 0; i < 6; i++) {
+      const cyc = clk * .34 + i / 6 + v.r * .37, id = Math.floor(cyc), f = cyc - id;
+      const a = hr(id * 7 + i * 3.3 + v.r) * TAU + f * 1.5, rr = v.r * (1.44 - .5 * f);
+      c.globalAlpha = Math.sin(Math.PI * f) * .85;
+      c.fillRect(v.x + Math.cos(a) * rr - .8, v.y + Math.sin(a) * rr - .8, 1.6, 1.6);
+    }
+    c.globalAlpha = 1;
+    const arm = v.age - 1.2; // a ring cast off at the moment it turns dangerous
+    if (arm < .5) {
+      c.strokeStyle = `rgba(255,150,116,${(1 - arm / .5) * .8})`; c.lineWidth = 2 * (1 - arm / .5) + .5;
+      circle(c, v.x, v.y, v.r * (1 + .4 * BS.ease(arm / .5))); c.stroke();
+    }
+  }
+
+  // n = { x, y, type, age, linked, pulse, ph }; size is the fragment radius.
+  function drawNode(c, n, size, clk, fade = 1) {
+    const a = clamp(n.age / .45, 0, 1);
+    if (a <= 0 || fade <= 0) return;
+    const k = (.5 + .5 * (RM ? BS.ease(a) : backOut(a))) * (1 + Math.sin(clk * 2 + n.ph) * .025), r = size * k;
+    c.globalAlpha = Math.min(1, a * 1.8) * fade;
+    if (n.linked) {
+      const pu = n.pulse;
+      if (pu > 0) glow(c, n.x, n.y, r * (1.9 + (1 - pu) * 1.7), pu * .85);
+      const s = coinSprite(n.type, size), d = s.cw * k * (1 + pu * .13);
+      c.drawImage(s, n.x - d / 2, n.y - d / 2, d, d);
+      if (pu > 0) {
+        c.strokeStyle = `rgba(255,240,196,${pu * .85})`; c.lineWidth = 1.6;
+        circle(c, n.x, n.y, r + 4 + (1 - pu) * 20); c.stroke();
+        c.strokeStyle = `rgba(246,220,152,${pu * .4})`; c.lineWidth = 1;
+        circle(c, n.x, n.y, r + 2 + (1 - pu) * 34); c.stroke();
+      }
+    } else {
+      const s = medalSprite(n.type, size), d = s.cw * k, dir = n.ph > 3 ? 1 : -1;
+      c.drawImage(s, n.x - d / 2, n.y - d / 2, d, d);
+      if (lite) c.drawImage(tickSprite(size), n.x - r, n.y - r, r * 2, r * 2);
+      else spin(c, tickSprite(size), n.x, n.y, r * 2, clk * .22 * dir + n.ph);
+      const g0 = clk * .85 * dir + n.ph * 1.7; // a glint that travels round the rim
+      c.strokeStyle = 'rgba(255,250,230,.9)'; c.lineWidth = 1.7; c.lineCap = 'round';
+      c.beginPath(); c.arc(n.x, n.y, r - .85, g0, g0 + .55); c.stroke();
+      if (n.shock > 0) {
+        c.strokeStyle = `rgba(255,140,108,${n.shock * .9})`; c.lineWidth = 1.8;
+        circle(c, n.x, n.y, r + 3 + (1 - n.shock) * 7); c.stroke();
+      }
+    }
+    c.globalAlpha = 1;
+  }
+
+  // pts: the linked fragments. trail + p: the fine lead from the last fragment to the finger.
+  function drawThread(c, pts, trail, p, clk = 0) {
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    const full = pts.length > 4 && new Set(pts.map(q => q.type)).size === 5; // all five kinds: it burns brighter
+    if (pts.length > 1) {
+      if (full) { c.strokeStyle = `rgba(255,232,170,${RM ? .06 : .055 + .03 * Math.sin(clk * 5)})`; c.lineWidth = 28; polyline(c, pts); }
+      c.strokeStyle = 'rgba(232,184,92,.05)'; c.lineWidth = 22; polyline(c, pts);
+      c.strokeStyle = 'rgba(236,190,100,.08)'; c.lineWidth = 14; polyline(c, pts);
+      c.strokeStyle = 'rgba(248,216,140,.2)'; c.lineWidth = 7.5; polyline(c, pts);
+      c.strokeStyle = '#a97c28'; c.lineWidth = 3.6; polyline(c, pts);
+      c.strokeStyle = GOLD_L; c.lineWidth = 2.3; polyline(c, pts);
+      c.strokeStyle = 'rgba(255,252,236,.92)'; c.lineWidth = .8; polyline(c, pts);
+    }
+    const lead = p && trail.length ? [...trail, { x: p.x, y: p.y }] : null;
+    if (lead) {
+      c.strokeStyle = 'rgba(248,216,140,.15)'; c.lineWidth = 7; smooth(c, lead);
+      c.strokeStyle = 'rgba(252,232,178,.88)'; c.lineWidth = 1.4; smooth(c, lead);
+    }
+    if (pts.length) {
+      // a pulse of light that runs the thread toward the finger
+      const all = lead ? [...pts, ...lead.slice(1)] : pts, L = pathLen(all);
+      if (L > 30 && !RM) {
+        const per = L / 320 + .55;
+        for (let w = 0; w < (full ? 2 : 1); w++) {
+          const s = ((clk + w * per / 2) % per) * 320;
+          for (let j = 0; j < 3; j++) {
+            const q = s - j * 9 >= 0 ? along(all, s - j * 9) : null;
+            if (q) glow(c, q.x, q.y, 13 - j * 2.5, .95 - j * .3);
+          }
+          const q = along(all, s);
+          if (q) { c.fillStyle = '#fffdf2'; circle(c, q.x, q.y, 1.8); c.fill(); }
+        }
+      }
+      // fine sparkles shed along the thread
+      if (pts.length > 1) {
+        const TL = pathLen(pts), K = lite ? 3 : Math.min(9, 2 + pts.length);
+        c.fillStyle = '#fff6d8';
+        for (let i = 0; i < K; i++) {
+          const cyc = clk * .85 + i * .37, id = Math.floor(cyc), f = cyc - id, h1 = hr(id * 13.1 + i * 7.7), h2 = hr(id * 5.3 + i * 2.9);
+          const q = along(pts, h1 * TL);
+          if (!q) continue;
+          c.globalAlpha = Math.sin(Math.PI * f) * .9;
+          star4(c, q.x + (h2 - .5) * 16, q.y + (hr(h1 * 91) - .5) * 10 + f * 9, 2 + 2.6 * h2);
+        }
+        c.globalAlpha = 1;
+      }
+    }
+    if (p && trail.length) {
+      glow(c, p.x, p.y, 24, .4);
+      c.strokeStyle = 'rgba(250,228,170,.6)'; c.lineWidth = 1.2; circle(c, p.x, p.y, 15); c.stroke();
+      c.strokeStyle = 'rgba(250,228,170,.42)'; c.lineWidth = 1;
+      for (let i = 0; i < 3; i++) { const a = clk * 1.1 + i * TAU / 3; c.beginPath(); c.arc(p.x, p.y, 19.5, a, a + .7); c.stroke(); }
+    }
+  }
+  // Banked threads stay behind as constellation lines: the round becomes the player's own star chart.
+  function drawChart(c, paths, a, big, clk) {
+    if (!paths.length || a <= 0) return;
+    const gap = big ? 6.5 : 4.5;
+    c.lineCap = 'round';
+    c.beginPath();
+    for (const p of paths) for (let i = 0; i < p.length - 1; i++) {
+      const A = p[i], B = p[i + 1], dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy);
+      if (d <= gap * 2 + 1) continue;
+      c.moveTo(A.x + dx / d * gap, A.y + dy / d * gap); c.lineTo(B.x - dx / d * gap, B.y - dy / d * gap);
+    }
+    if (big) { c.strokeStyle = `rgba(232,190,104,${a * .2})`; c.lineWidth = 4.5; c.stroke(); }
+    c.strokeStyle = `rgba(232,190,104,${a})`; c.lineWidth = big ? 1.15 : .9; c.stroke();
+    c.fillStyle = `rgba(252,232,178,${Math.min(1, a * 2 + .1)})`;
+    c.beginPath();
+    for (const p of paths) for (const q of p) { c.moveTo(q.x + (big ? 2 : 1.6), q.y); c.arc(q.x, q.y, big ? 2 : 1.6, 0, TAU); }
+    c.fill();
+    if (big) {
+      c.fillStyle = '#fff3d0';
+      for (const p of paths) for (const q of p) {
+        const tw = RM ? .8 : .6 + .4 * Math.sin(clk * 1.9 + q.x * .13 + q.y * .07);
+        c.globalAlpha = Math.min(1, a * 1.5) * tw;
+        star4(c, q.x, q.y, 5 + 2.5 * tw);
+      }
+      c.globalAlpha = 1;
+    }
+  }
+  function drawArt(c, path, a, big) { drawChart(c, [path], a, big, 0); }
+  function drawFlash(c, pts, a) {
+    if (RM) a *= .6;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.strokeStyle = `rgba(255,204,112,${a * .045})`; c.lineWidth = 12 + 12 * a; polyline(c, pts);
+    c.strokeStyle = `rgba(255,208,120,${a * .07})`; c.lineWidth = 8 + 8 * a; polyline(c, pts);
+    c.strokeStyle = `rgba(255,212,126,${a * .28})`; c.lineWidth = 4 + 5 * a; polyline(c, pts);
+    c.strokeStyle = `rgba(255,248,224,${a})`; c.lineWidth = 1.2 + 3 * a; polyline(c, pts);
+    for (const q of pts) glow(c, q.x, q.y, 12 + 30 * a, a * .75);
+  }
+  function drawParticle(c, x, y, size, color, a) {
+    glow(c, x, y, size * 4.2, a * .55, color === RED ? E_RGB : G_RGB);
+    c.globalAlpha = a; c.fillStyle = color; circle(c, x, y, size); c.fill();
+    c.globalAlpha = 1;
+  }
+  // Ember-red pieces of a broken thread, falling away. t = seconds since the break.
+  function drawShards(c, list, t) {
+    if (t < 0) return;
+    c.lineCap = 'round';
+    for (const q of list) {
+      if (t >= q.life) continue;
+      const k = t / q.life, x = q.x + q.vx * t, y = q.y + q.vy * t + 190 * t * t, ang = q.ang + q.w * t, hl = q.len / 2;
+      const dx = Math.cos(ang) * hl, dy = Math.sin(ang) * hl;
+      const al = (1 - k) * (1 - k * .4);
+      c.beginPath(); c.moveTo(x - dx, y - dy); c.lineTo(x + dx, y + dy);
+      c.strokeStyle = `rgba(236,96,66,${al * .22})`; c.lineWidth = 7; c.stroke();
+      c.strokeStyle = `rgba(${k < .14 ? '255,230,196' : '240,120,88'},${al})`; c.lineWidth = 2.6 - k * 1.2; c.stroke();
+    }
+  }
+  // The brief dim and red wash when a thread is lost. k runs 1 → 0.
+  function drawSnapFlash(c, w, h, k) {
+    if (k <= 0) return;
+    if (RM) k *= .45;
+    c.fillStyle = `rgba(3,4,10,${k * .3})`; c.fillRect(0, 0, w, h);
+    c.globalAlpha = Math.min(1, k * .6); c.drawImage(dimSprite(), 0, 0, w, h);
+    c.globalAlpha = 1;
+  }
+  // The full-picture flourish: a restrained radial burst of fine rays. k runs 0 → 1.
+  function drawRays(c, x, y, k) {
+    if (k < 0 || k >= 1) return;
+    const e = RM ? 1 : BS.ease(k), a = (1 - k) * (1 - k);
+    glow(c, x, y, 34 + 70 * e, a * .55);
+    c.lineCap = 'round';
+    for (let pass = 0; pass < 2; pass++) {
+      c.strokeStyle = `rgba(255,238,188,${a * (pass ? .42 : .8)})`; c.lineWidth = pass ? .8 : 1.2;
+      c.beginPath();
+      for (let i = pass; i < 24; i += 2) {
+        const ang = i / 24 * TAU + .13, r0 = 22 + 30 * e, r1 = r0 + (pass ? 20 : 44) * e;
+        c.moveTo(x + Math.cos(ang) * r0, y + Math.sin(ang) * r0); c.lineTo(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1);
+      }
+      c.stroke();
+    }
+    c.strokeStyle = `rgba(255,238,188,${a * .6})`; c.lineWidth = 1;
+    circle(c, x, y, 18 + 58 * e); c.stroke();
+  }
+  function drawPop(c, q, w) {
+    const k = q.life / q.max, age = q.max - q.life;
+    const s = RM || age >= .24 ? 1 : .55 + .45 * backOut(age / .24);
+    c.save();
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.globalAlpha = clamp(k * 2.5, 0, 1);
+    c.font = `${q.it ? '600' : '700'} ${q.size}px ${SERIF}`;
+    const tw = c.measureText(q.text).width, hw = tw / 2 + (q.it ? 40 : 12), x = clamp(q.x, hw, w - hw);
+    c.translate(x, q.y); c.scale(s, s);
+    if (q.size >= 22) glow(c, 0, 0, q.size * 1.7, .3);
+    c.lineJoin = 'round'; c.strokeStyle = 'rgba(4,9,24,.72)'; c.lineWidth = 3.5; c.strokeText(q.text, 0, 0);
+    c.fillStyle = q.color; c.fillText(q.text, 0, 0);
+    if (q.it) { // hairline rules either side, as on an engraved title
+      c.globalAlpha *= .75; c.fillStyle = q.color;
+      for (const d of [-1, 1]) {
+        c.fillRect(d > 0 ? tw / 2 + 9 : -tw / 2 - 31, 0, 22, 1);
+        c.save(); c.translate(d * (tw / 2 + 34), .5); c.rotate(Math.PI / 4); c.fillRect(-1.6, -1.6, 3.2, 3.2); c.restore();
+      }
+    }
+    c.restore();
+  }
+  // The five fragment kinds: each lights up once the current thread has collected it.
+  function drawTypeRow(c, cx, y, have, bump) {
+    const sp = 27, x0 = cx - sp * 2, full = have.size === 5;
+    c.fillStyle = full ? 'rgba(246,220,152,.7)' : 'rgba(217,178,95,.28)'; c.fillRect(x0, y - .5, sp * 4, 1);
+    if (full) { glow(c, cx - sp, y, 30, .32); glow(c, cx + sp, y, 30, .32); }
+    TYPES.forEach((t, i) => {
+      const on = have.has(t), b = (bump && bump[t]) || 0, d = 34 * (1 + (RM ? 0 : .42 * b * b));
+      if (b > 0) glow(c, x0 + i * sp, y, 20, b * .7);
+      c.drawImage(miniSprite(t, on), x0 + i * sp - d / 2, y - d / 2, d, d);
+    });
+  }
+
+  // Letterspaced small caps for HUD labels. Returns the width; with dry = true it only measures.
+  function spaced(c, text, x, y, sp, align, dry) {
+    let w = -sp;
+    const ws = [];
+    for (const ch of text) { const cw = c.measureText(ch).width; ws.push(cw); w += cw + sp; }
+    if (dry) return w;
+    let px = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x, i = 0;
+    c.textAlign = 'left';
+    for (const ch of text) { c.fillText(ch, px, y); px += ws[i++] + sp; }
+    return w;
+  }
+  function drawHud() {
+    ctx.fillStyle = hudGrad; ctx.fillRect(0, 0, W, HUD_H + 14);
+    if (!running && !over) return;
+    const ha = over ? clamp(1 - (overT - .85) / .5, 0, 1) : 1; // fades once the end card is up
+    if (ha <= 0) return;
+    ctx.globalAlpha = ha;
+    const left = Math.max(0, Math.ceil(DURATION - time));
+    const urgent = running && left <= 10;
+    const since = 1 - ((((DURATION - time) % 1) + 1) % 1);
+    const beat = urgent && !RM ? Math.max(0, 1 - since * 2.6) : 0;
+    ctx.textBaseline = 'alphabetic';
+
+    // labels
+    ctx.font = '600 9px Inter, sans-serif'; ctx.fillStyle = 'rgba(246,220,152,.58)';
+    spaced(ctx, 'SCORE', 18, 19, 1.9, 'left');
+    ctx.fillStyle = urgent ? 'rgba(255,170,140,.85)' : 'rgba(246,220,152,.58)';
+    spaced(ctx, 'TIME', W - 18, 19, 1.9, 'right');
+
+    // score: counts up as the gold dust arrives
+    const txt = BS.fmt(Math.round(shown)), room = W / 2 - 68 - 18 - 8;
+    ctx.font = `700 32px ${SERIF}`;
+    const fit = Math.min(1, room / ctx.measureText(txt).width), sb = RM ? 0 : scoreBump;
+    ctx.save(); ctx.translate(18, 47); ctx.scale(fit * (1 + .1 * sb), fit * (1 + .1 * sb));
+    if (scoreBump > 0) glow(ctx, ctx.measureText(txt).width / 2, -10, 34, scoreBump * .5);
+    ctx.textAlign = 'left'; ctx.fillStyle = scoreBump > 0 ? '#fff3cf' : GOLD_L; ctx.fillText(txt, 0, 0);
+    ctx.restore();
+
+    // timer: the colon and the tens digit hold still while the figures change; it beats once a second in the last ten
+    if (!digW) digW = Math.max(...'0123456789'.split('').map(ch => ctx.measureText(ch).width));
+    const mm = String(Math.floor(left / 60)), ss = String(left % 60).padStart(2, '0');
+    ctx.save(); ctx.translate(W - 18, 47); ctx.scale(1 + .13 * beat, 1 + .13 * beat);
+    if (urgent) glow(ctx, -digW * 1.5, -10, 36, .18 + .4 * beat, E_RGB);
+    ctx.fillStyle = urgent ? '#ffa184' : GOLD_L;
+    const sx = -digW * 1.9;
+    ctx.textAlign = 'left'; ctx.fillText(ss, sx, 0);
+    ctx.textAlign = 'center'; ctx.fillText(':', sx - 5, -1.5);
+    ctx.textAlign = 'right'; ctx.fillText(mm, sx - 10, 0);
+    ctx.restore();
+
+    // timer hairline with quarter ticks and a small jewel at the leading end
+    const x0 = 18, x1 = W - 18, hy = 58, xe = x0 + (x1 - x0) * clamp(1 - time / DURATION, 0, 1);
+    ctx.fillStyle = 'rgba(217,178,95,.2)'; ctx.fillRect(x0, hy, x1 - x0, 1);
+    ctx.fillStyle = 'rgba(217,178,95,.34)';
+    for (let i = 0; i <= 4; i++) ctx.fillRect(Math.round(x0 + (x1 - x0) * i / 4) - .5, hy - 2, 1, 5);
+    ctx.fillStyle = urgent ? '#ff9a80' : barGrad; ctx.fillRect(x0, hy - .5, xe - x0, 2);
+    if (running) {
+      glow(ctx, xe, hy + .5, 9 + 4 * beat, .75, urgent ? E_RGB : G_RGB);
+      ctx.save(); ctx.translate(xe, hy + .5); ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = urgent ? '#ffd0bd' : '#fff3cf'; ctx.fillRect(-2.4, -2.4, 4.8, 4.8);
+      ctx.restore();
+    }
+
+    drawTypeRow(ctx, W / 2, 34, new Set(chain.map(c => c.type)), typeBump);
+
+    // what the thread in hand is worth
+    if (worth && worthA > 0) {
+      const val = '+' + BS.fmt(10 * worth.n * worth.n * (worth.full ? 2 : 1));
+      const lab = worth.full ? 'FULL PICTURE ×2' : `THREAD OF ${worth.n}`;
+      ctx.globalAlpha = worthA * ha;
+      ctx.font = '600 9px Inter, sans-serif';
+      const lw = spaced(ctx, lab, 0, 0, 1.7, 'left', true);
+      ctx.font = `700 21px ${SERIF}`;
+      const vw = ctx.measureText(val).width, sx = W / 2 - (lw + 9 + vw) / 2, wb = RM ? 0 : worthBump;
+      ctx.font = '600 9px Inter, sans-serif';
+      ctx.fillStyle = worth.full ? GOLD_L : 'rgba(246,220,152,.68)';
+      spaced(ctx, lab, sx, 77, 1.7, 'left');
+      ctx.save(); ctx.translate(sx + lw + 9 + vw / 2, 80); ctx.scale(1 + .22 * wb, 1 + .22 * wb);
+      if (worthBump > 0 || worth.full) glow(ctx, 0, -6, 24, worth.full ? .3 + .3 * worthBump : worthBump * .4);
+      ctx.font = `700 21px ${SERIF}`; ctx.textAlign = 'center'; ctx.fillStyle = worth.full ? '#fff3cf' : GOLD_L;
+      ctx.fillText(val, 0, 0);
+      ctx.restore();
+      ctx.globalAlpha = ha;
+    }
+
+    if (running && time < 5) {
+      ctx.globalAlpha = Math.min(1, (5 - time) / 1.2);
+      ctx.fillStyle = 'rgba(246,220,152,.8)'; ctx.textAlign = 'center';
+      ctx.font = '500 13px Inter, sans-serif';
+      ctx.fillText('Drag through fragments · lift to bank · collect all five', W / 2, hintAt);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    ctx.drawImage(bg, 0, 0, W, H);
+    drawAmbient();
+    if (over) drawChart(ctx, art, .16 + .6 * BS.ease(overT / .8), true, clock);
+    else { // older threads recede a little; the latest few stay brighter
+      const cut = Math.max(0, art.length - 4);
+      drawChart(ctx, art.slice(0, cut), .11, false, clock);
+      drawChart(ctx, art.slice(cut), .2, false, clock);
+    }
+    for (const f of flashes) drawFlash(ctx, f.pts, f.life / .9);
+    ctx.save();
+    if (shake > 0) { const s = (shake / .3) ** 2 * 5; ctx.translate(Math.sin(clock * 91) * s, Math.cos(clock * 77) * s); }
+    voids.forEach(v => drawVoid(ctx, v, clock));
+    if (chain.length || (ptr && !snapped)) drawThread(ctx, chain, trail, ptr, clock);
+    const fade = over ? 1 - overT / .45 : 1;
+    if (fade > 0) nodes.forEach(n => drawNode(ctx, n, R, clock, fade));
+    for (const b of breaks) drawShards(ctx, b.list, clock - b.t0);
+    ctx.restore();
+    // particles: every glow in one additive pass, then the cores
+    ctx.globalCompositeOperation = 'lighter';
+    for (const q of parts) {
+      const a = q.dust ? .8 : clamp(q.life / q.max, 0, 1) * .55, r = q.size * (q.dust ? 4.6 : 4.2);
+      ctx.globalAlpha = a; ctx.drawImage(glowSprite(q.color === RED ? E_RGB : G_RGB), q.x - r, q.y - r, r * 2, r * 2);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,232,170,.38)'; ctx.lineWidth = 1;
+    for (const q of parts) {
+      if (q.dust) {
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.moveTo(q.px, q.py); ctx.lineTo(q.x, q.y); ctx.stroke();
+        ctx.fillStyle = '#fff6d8'; circle(ctx, q.x, q.y, q.size * .8); ctx.fill();
+      } else {
+        ctx.globalAlpha = clamp(q.life / q.max, 0, 1); ctx.fillStyle = q.color; circle(ctx, q.x, q.y, q.size); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    for (const q of rays) drawRays(ctx, q.x, q.y, 1 - q.life / q.max);
+    for (const q of pops) drawPop(ctx, q, W);
+    drawHud();
+    if (redFlash > 0) drawSnapFlash(ctx, W, H, redFlash / .35);
+  }
+
+  // ---------- tutorial demos ----------
+  // Each demo is a pure function of time: it builds its own fragments and effects every frame
+  // with the drawing helpers above, and never reads or writes the live game state.
+  const DR = 19; // fragment radius in the demo frame (the game's minimum size)
+  const DRAG = -Math.log(.96) * 60; // the game damps particle speed by .96 per frame at 60 fps
+  const sstep = k => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
+  const dn = (x, y, type, ph = 0) => ({ x, y, type, age: 9, linked: false, pulse: 0, ph });
+  let demoBgCache = null;
+  function demoBg(c, w, h) {
+    const d = (c.getTransform && c.getTransform().a) || 1, key = `${w}x${h}@${d}`;
+    if (!demoBgCache || demoBgCache.key !== key) demoBgCache = { key, img: paintBackground(w, h, Math.round(w * d), Math.round(h * d)) };
+    c.drawImage(demoBgCache.img, 0, 0, w, h);
+  }
+  // Fade in at the start of each loop and out at the end, so the restart doesn't jump.
+  function demoFade(c, w, h, t, L) {
+    const a = clamp(Math.max(1 - t / .3, 1 - (L - t) / .35), 0, 1);
+    if (a > 0) { c.fillStyle = `rgba(8,19,41,${a})`; c.fillRect(0, 0, w, h); }
+  }
+  // Finger path: keys = [[time, x, y], ...], eased between keys.
+  function track(keys, t) {
+    if (t <= keys[0][0]) return { x: keys[0][1], y: keys[0][2] };
+    for (let i = 1; i < keys.length; i++) {
+      const [t1, x1, y1] = keys[i], [t0, x0, y0] = keys[i - 1];
+      if (t <= t1) { const k = sstep((t - t0) / ((t1 - t0) || 1)); return { x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k }; }
+    }
+    const l = keys[keys.length - 1]; return { x: l[1], y: l[2] };
+  }
+  // Mark the fragments linked by time t (link times in tl) and give each its pulse ring.
+  function linkUpTo(path, tl, t) {
+    const on = [];
+    path.forEach((n, i) => { if (t >= tl[i]) { n.linked = true; n.pulse = Math.max(0, 1 - (t - tl[i]) * 2.2); on.push(n); } });
+    return on;
+  }
+  // Same particles as burst(), seeded so every frame agrees.
+  function burstSpec(x, y, n, color, sp, seed) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const k = seed * 31 + i * 7, a = hr(k) * Math.PI * 2, s = (.3 + .7 * hr(k + 1)) * sp;
+      out.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: .4 + .4 * hr(k + 2), max: .8, size: 1 + 1.4 * hr(k + 3), color, g: 0 });
+    }
+    return out;
+  }
+  // Where a game particle would be after t seconds of the game's damping and gravity.
+  function demoParts(c, list, t) {
+    if (t < 0) return;
+    const f = (1 - Math.exp(-DRAG * t)) / DRAG;
+    for (const q of list) {
+      if (t >= q.life) continue;
+      const gk = q.g / DRAG;
+      drawParticle(c, q.x + q.vx * f, q.y + gk * t + (q.vy - gk) * f, q.size, q.color, clamp((q.life - t) / q.max, 0, 1));
+    }
+  }
+  function demoPop(c, w, x, y, text, size, color, t, life = 1.2, it = false) {
+    if (t < 0 || t >= life) return;
+    drawPop(c, { x, y: y - 26 * t, text, size, color, life: life - t, max: life, it }, w);
+  }
+  // Bank effects from time tb: flash along the thread, a burst at every fragment, faint art left behind.
+  function demoBank(c, path, t, tb) {
+    if (t < tb) return;
+    drawArt(c, path, .2, false);
+    const a = 1 - (t - tb) / .9;
+    if (a > 0) drawFlash(c, path, a);
+    path.forEach((n, i) => demoParts(c, burstSpec(n.x, n.y, 6, GOLD_L, 140, 20 + i), t - tb));
+  }
+  const bob = (list, T) => list.forEach((n, i) => { n.x += Math.sin(T * .8 + i * 1.7) * 3; n.y += Math.cos(T * .6 + i * 2.3) * 3; });
+
+  const tutorial = [
+    {
+      title: 'Touch a fragment',
+      text: 'Put one finger on any fragment. Each is a piece of your content: a contract, email, invoice, ticket or customer record.',
+      demo(c, w, h, T) {
+        const L = 3.6, t = T % L;
+        demoBg(c, w, h);
+        const n = dn(w * .5, h * .55, 'contract', 3);
+        const others = [dn(w * .2, h * .28, 'email', 1), dn(w * .8, h * .25, 'invoice', 2), dn(w * .2, h * .8, 'ticket', 4), dn(w * .8, h * .78, 'customer', 5)];
+        bob(others, T);
+        const tDown = 1, tUp = 2.6;
+        const hand = track([[0, w * .74, h + 24], [tDown, n.x, n.y], [tUp, n.x, n.y], [L - .2, w * .86, h + 24]], t);
+        const down = t >= tDown && t < tUp;
+        if (down) { linkUpTo([n], [tDown], t); drawThread(c, [n], [n], hand, T); }
+        [...others, n].forEach(m => drawNode(c, m, DR, T));
+        demoParts(c, burstSpec(n.x, n.y, 7, GOLD_L, 90, 1), t - tDown);
+        BS.drawHand(c, hand.x, hand.y, down);
+        demoFade(c, w, h, t, L);
+      },
+    },
+    {
+      title: 'Drag through more',
+      text: 'Without lifting, slide through other fragments to link them into one golden thread.',
+      demo(c, w, h, T) {
+        const L = 4.8, t = T % L;
+        demoBg(c, w, h);
+        const path = [dn(w * .15, h * .66, 'contract'), dn(w * .38, h * .32, 'email', 1), dn(w * .62, h * .64, 'invoice', 2), dn(w * .85, h * .3, 'ticket', 3)];
+        const others = [dn(w * .86, h * .82, 'customer', 4), dn(w * .62, h * .16, 'customer', 5)];
+        bob(others, T);
+        const tl = [.8, 1.6, 2.4, 3.2];
+        const hand = track([[0, w * .05, h + 24], ...path.map((n, i) => [tl[i], n.x, n.y]), [L, path[3].x, path[3].y]], t);
+        const down = t >= tl[0];
+        const on = linkUpTo(path, tl, t);
+        if (down) drawThread(c, on, [on[on.length - 1]], hand, T);
+        [...others, ...path].forEach(m => drawNode(c, m, DR, T));
+        path.forEach((n, i) => demoParts(c, burstSpec(n.x, n.y, 7, GOLD_L, 90, i + 1), t - tl[i]));
+        BS.drawHand(c, hand.x, hand.y, down);
+        demoFade(c, w, h, t, L);
+      },
+    },
+    {
+      title: 'Lift to bank it',
+      text: 'Lift your finger to bank the thread. Longer threads score far more: 4 fragments is 160 points, 8 is 640.',
+      demo(c, w, h, T) {
+        const L = 4.6, t = T % L;
+        demoBg(c, w, h);
+        const path = [dn(w * .14, h * .42, 'customer'), dn(w * .36, h * .72, 'email', 1), dn(w * .6, h * .42, 'contract', 2), dn(w * .82, h * .7, 'invoice', 3)];
+        const others = [dn(w * .86, h * .2, 'ticket', 4)];
+        bob(others, T);
+        const tl = [-1, -1, -1, 1.1], tUp = 1.8;
+        const hand = track([[.3, path[2].x, path[2].y], [tl[3], path[3].x, path[3].y], [tUp, path[3].x, path[3].y], [tUp + .9, w * .95, h + 24]], t);
+        const down = t < tUp;
+        if (down) { const on = linkUpTo(path, tl, t); drawThread(c, on, [on[on.length - 1]], hand, T); }
+        demoBank(c, path, t, tUp);
+        // the board refills after a bank
+        const fresh = [dn(w * .4, h * .3, 'ticket', 6), dn(w * .58, h * .8, 'email', 7)];
+        fresh.forEach(n => { n.age = t - (tUp + 1.2); });
+        [...others, ...fresh, ...(down ? path : [])].forEach(m => drawNode(c, m, DR, T));
+        demoParts(c, burstSpec(path[3].x, path[3].y, 7, GOLD_L, 90, 4), t - tl[3]);
+        demoPop(c, w, path[3].x, path[3].y - DR - 12, '+' + BS.fmt(10 * 4 * 4), 24, GOLD_L, t - tUp);
+        BS.drawHand(c, hand.x, hand.y, down);
+        demoFade(c, w, h, t, L);
+      },
+    },
+    {
+      title: 'Keep clear of blind spots',
+      text: 'Dark blind spots drift in. If your finger touches one, the thread breaks and scores nothing.',
+      demo(c, w, h, T) {
+        const L = 5, t = T % L;
+        demoBg(c, w, h);
+        const A = dn(w * .14, h * .72, 'email'), B = dn(w * .36, h * .4, 'customer', 1);
+        const others = [dn(w * .88, h * .84, 'invoice', 2), dn(w * .86, h * .18, 'contract', 3)];
+        bob(others, T);
+        const tV = .3, V = { x: w * .68, y: h * .52, r: Math.min(36, h * .16), age: t - tV, rot: T * .7 };
+        const tA = .7, tB = 1.4, tIn = 2.6, tUp = 3.3;
+        const keys = [[0, w * .05, h + 24], [tA, A.x, A.y], [tB, B.x, B.y], [tIn, V.x + 6, V.y + 4], [tUp, V.x + 6, V.y + 4], [tUp + .9, w * .9, h + 24]];
+        const hand = track(keys, t);
+        // the first moment the finger meets the formed blind spot, using the game's own test
+        let ts = Infinity;
+        for (let s = tB; s <= tIn + .01; s += .02) {
+          const p = track(keys, s);
+          if (s - tV > 1.2 && Math.hypot(p.x - V.x, p.y - V.y) < V.r * .9) { ts = s; break; }
+        }
+        const broke = t >= ts, down = t >= tA && t < tUp;
+        if (V.age > 0) drawVoid(c, V, T);
+        if (down && !broke) { const on = linkUpTo([A, B], [tA, tB], t); drawThread(c, on, [on[on.length - 1]], hand, T); }
+        if (broke) { A.shock = B.shock = Math.max(0, 1 - (t - ts) * 2.4); }
+        [...others, A, B].forEach(m => drawNode(c, m, DR, T));
+        demoParts(c, burstSpec(A.x, A.y, 7, GOLD_L, 90, 1), t - tA);
+        demoParts(c, burstSpec(B.x, B.y, 7, GOLD_L, 90, 2), t - tB);
+        demoPop(c, w, V.x, V.y - V.r - 18, 'Blind spot · keep clear', 15, '#ffb39e', t - tV, 2.2);
+        if (broke) {
+          const sp = track(keys, ts), pieces = resample([A, B, sp], 14, 44);
+          drawShards(c, shardSpec(pieces, seeded(11)), t - ts);
+          demoParts(c, emberSpec(pieces, seeded(7)), t - ts);
+          demoPop(c, w, sp.x, sp.y - 34, 'Lost in a blind spot', 17, '#ff9a80', t - ts);
+        }
+        BS.drawHand(c, hand.x, hand.y, down);
+        if (broke) drawSnapFlash(c, w, h, Math.max(0, .35 - (t - ts)) / .35);
+        demoFade(c, w, h, t, L);
+      },
+    },
+    {
+      title: 'Get the full picture',
+      text: `Link all five kinds in one thread for a full picture and double points. Rounds last ${DURATION} seconds.`,
+      demo(c, w, h, T) {
+        const L = 6.2, t = T % L;
+        demoBg(c, w, h);
+        const ys = [.72, .46, .74, .48, .76];
+        const path = TYPES.map((ty, i) => dn(w * (.12 + i * .19), h * ys[i], ty, i));
+        const last = path[4], tl = [.6, 1.2, 1.8, 2.4, 3], tUp = 4.1;
+        const hand = track([[0, w * .02, h + 24], ...path.map((n, i) => [tl[i], n.x, n.y]), [tUp, last.x, last.y], [tUp + .9, w * .98, h + 24]], t);
+        const down = t >= tl[0] && t < tUp;
+        const on = down ? linkUpTo(path, tl, t) : [];
+        const bump = {};
+        on.forEach((n, i) => { bump[n.type] = Math.max(0, 1 - (t - tl[i]) * 3.5); });
+        drawTypeRow(c, w / 2, 30, new Set(on.map(n => n.type)), bump);
+        if (down) drawThread(c, on, [on[on.length - 1]], hand, T);
+        demoBank(c, path, t, tUp);
+        if (t < tUp) path.forEach(m => drawNode(c, m, DR, T));
+        path.forEach((n, i) => demoParts(c, burstSpec(n.x, n.y, 7, GOLD_L, 90, i + 1), t - tl[i]));
+        drawRays(c, last.x, last.y, (t - tUp) / 1.1);
+        demoPop(c, w, last.x, last.y - DR - 16, 'Full picture', 18, GOLD_L, t - tl[4]);
+        demoPop(c, w, last.x, last.y - DR - 12, '+' + BS.fmt(10 * 5 * 5 * 2), 24, GOLD_L, t - tUp);
+        demoPop(c, w, last.x, last.y - DR - 50, 'Full picture ×2', 19, GOLD_L, t - tUp, 1.5, true);
+        BS.drawHand(c, hand.x, hand.y, down);
+        demoFade(c, w, h, t, L);
+      },
+    },
+  ];
+
+  let last = performance.now();
+  function frame(t) {
+    const raw = t - last, dt = Math.min(.05, raw / 1000); last = t;
+    // About 1.5 s of slow frames (ignoring pauses) switches to the lighter look for the rest of the visit.
+    if (!lite && raw < 100) { slow = raw > 22 ? slow + raw : Math.max(0, slow - raw * .5); if (slow > 1500) lite = true; }
+    update(dt); draw();
+    requestAnimationFrame(frame);
+  }
+
+  if (BS.params.has('debug')) window.__dbg = {
+    nodes: () => nodes, voids: () => voids, score: () => score,
+    stats: () => ({ connected, longest, pictures: fulls, lost }),
+    step: (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); draw(); },
+  };
+  resize();
+  window.addEventListener('resize', resize);
+  // Text is drawn on the canvas, so re-measure the figures once the web fonts arrive.
+  if (document.fonts) {
+    if (document.fonts.load) for (const f of [`700 32px ${SERIF}`, `700 19px ${SERIF}`, '600 9px Inter', '500 13px Inter']) document.fonts.load(f).catch(() => {});
+    if (document.fonts.ready) document.fonts.ready.then(() => { digW = 0; });
+    if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => { digW = 0; });
+  }
+  for (let i = 0; i < 11; i++) spawnNode(i * .08); // ambient drift behind the start card
+  BS.init({
+    id: 'golden-thread',
+    tagline: 'Your AI is only as good as the fragments it can connect.',
+    tutorial,
+    onStart: start,
+  });
+  hintAt = hintY(); // the shell's mode pill exists now
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

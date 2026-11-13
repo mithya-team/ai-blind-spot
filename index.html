@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The AI Blind Spot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* First page: what this is, who is hosting, and who you are. Nothing else.
+     A night sky with an eclipse: the "o" in Spot is the blind spot. */
+  :root {
+    --ink: #070a13; --fg: #eef1f8; --dim: rgba(238,241,248,.64); --faint: rgba(238,241,248,.42);
+    --line: rgba(255,255,255,.11); --glass: rgba(255,255,255,.06); --halo: #8fb0ff;
+    --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-head: Inter, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: var(--ink); }
+  body { margin: 0; min-height: 100vh; color: var(--fg); font-family: var(--font-ui); background: var(--ink); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+  /* Sky: points of light (information) drift across; the eclipse hides whatever passes behind it. */
+  .sky { position: fixed; inset: 0; overflow: hidden; pointer-events: none; background: radial-gradient(900px 620px at 12% -8%, rgba(54,78,160,.46), transparent 70%); }
+  #stars { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .eclipse { --d: clamp(250px, 46vw, 420px); position: absolute; width: var(--d); height: var(--d); right: calc(var(--d) * -.44); top: calc(var(--d) * -.5); }
+  .eclipse i { position: absolute; border-radius: 50%; }
+  .eclipse .rays { inset: -46%; animation: spin 120s linear infinite;
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(143,176,255,.2) 10deg, transparent 26deg, transparent 62deg, rgba(143,176,255,.14) 74deg, transparent 96deg, transparent 138deg, rgba(160,190,255,.22) 150deg, transparent 170deg, transparent 214deg, rgba(143,176,255,.12) 228deg, transparent 250deg, transparent 292deg, rgba(143,176,255,.2) 306deg, transparent 326deg);
+    -webkit-mask-image: radial-gradient(closest-side, transparent 50%, #000 53%, rgba(0,0,0,.35) 70%, transparent 100%); mask-image: radial-gradient(closest-side, transparent 50%, #000 53%, rgba(0,0,0,.35) 70%, transparent 100%); }
+  .eclipse .glow { inset: -34%; background: radial-gradient(closest-side, transparent 71%, rgba(132,166,255,.6) 75%, rgba(96,134,255,.2) 85%, transparent 100%); animation: breathe 7s ease-in-out infinite alternate; }
+  .eclipse .ring { inset: -1.2%; background: radial-gradient(closest-side, transparent 96.4%, rgba(226,236,255,.95) 98.2%, rgba(160,190,255,.5) 99.2%, transparent 100%); }
+  .eclipse .disc { inset: 0; background: radial-gradient(circle at 40% 38%, #0c1224, #04060c 72%); }
+  .eclipse .bead { inset: -1.2%; animation: spin 46s linear infinite reverse; }
+  .eclipse .bead::after { content: ""; position: absolute; left: 50%; top: 0; width: 13%; height: 13%; transform: translate(-50%, -50%); border-radius: 50%;
+    background: radial-gradient(closest-side, #fff 7%, rgba(214,226,255,.85) 16%, rgba(132,166,255,.32) 42%, transparent 100%); animation: flare 5.5s ease-in-out infinite alternate; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes breathe { from { opacity: .72; transform: scale(.985); } to { opacity: 1; transform: scale(1.025); } }
+  @keyframes flare { from { opacity: .55; transform: translate(-50%, -50%) scale(.8); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } }
+
+  .wrap { position: relative; max-width: 520px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) max(clamp(16px, 5vw, 56px), env(safe-area-inset-right)) 40px max(clamp(16px, 5vw, 56px), env(safe-area-inset-left)); }
+  /* Full co-brand logos */
+  .bs-full { display: inline-flex; align-items: center; gap: 15px; --lh: 19px; }
+  .bs-full > * { box-sizing: content-box; height: var(--lh); flex: none; }
+  .bs-full > * + * { padding-left: 15px; border-left: 1px solid rgba(255,255,255,.18); }
+  .lf.ot { display: inline-flex; align-items: center; gap: calc(var(--lh) * .34); }
+  .lf.ot img { display: block; height: 100%; width: auto; }
+  .lf.ot img:first-child { clip-path: inset(3% round 22%); transform: scale(1.06); }
+  .lf.aws { height: calc(var(--lh) * 1.12); }
+  .lf.cap { height: calc(var(--lh) * 1.16); }
+
+  h1 { position: relative; z-index: 0; font-family: var(--font-head); font-weight: 700; font-size: clamp(50px, 15.4vw, 66px); line-height: .94; letter-spacing: -.045em; margin: 44px 0 16px; }
+  h1 > span { white-space: nowrap; }
+  h1 small { display: block; font-size: .36em; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--halo); margin: 0 0 12px 2px; }
+  .spot { position: relative; display: inline-block; width: .56em; height: .56em; margin: 0 .035em 0 .03em; border-radius: 50%; vertical-align: -.01em;
+    background: radial-gradient(circle at 38% 36%, #131a30, #03050a 70%);
+    box-shadow: 0 0 0 .035em rgba(214,226,255,.95), 0 0 .14em .04em rgba(143,176,255,.9), inset -.05em -.04em .09em rgba(143,176,255,.35); }
+  .spot::before { content: ""; position: absolute; inset: -.62em; border-radius: 50%; z-index: -1;
+    background: radial-gradient(closest-side, rgba(120,156,255,.75) 30%, rgba(96,134,255,.32) 50%, rgba(96,134,255,.1) 72%, transparent 100%);
+    animation: halo 4.5s ease-in-out infinite alternate; }
+  @keyframes halo { from { opacity: .7; transform: scale(.94); } to { opacity: 1; transform: scale(1.06); } }
+  .spot::after { content: ""; position: absolute; inset: -.045em; border-radius: 50%; animation: spin 9s linear infinite;
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(255,255,255,.95) 18deg, transparent 60deg, transparent 360deg);
+    -webkit-mask-image: radial-gradient(closest-side, transparent 84%, #000 88%, #000 96%, transparent 100%); mask-image: radial-gradient(closest-side, transparent 84%, #000 88%, #000 96%, transparent 100%); }
+  .lede { color: var(--dim); font-size: 17px; line-height: 1.5; margin: 0 0 28px; max-width: 34ch; text-wrap: pretty; }
+  .lede b { display: block; color: var(--fg); font-weight: 600; margin-top: 4px; }
+
+  .join { padding: 22px 18px 16px; border-radius: 26px; background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.045)); border: 1px solid var(--line); box-shadow: 0 30px 60px -40px #000, inset 0 1px 0 rgba(255,255,255,.14); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .join h2 { margin: 0 0 14px; font-family: var(--font-head); font-size: 23px; letter-spacing: -.02em; }
+  .kl { margin: -6px 0 10px; font-size: 13.5px; color: var(--dim); }
+  .klist { display: grid; gap: 6px; }
+  .kp { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: var(--fg); padding: 11px 12px 11px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); cursor: pointer; transition: background .15s, border-color .15s; }
+  .kp:hover, .kp:focus-visible { background: rgba(143,176,255,.16); border-color: var(--halo); outline: none; }
+  .kp b { display: block; font-size: 15.5px; font-weight: 600; }
+  .kp span { display: block; font-size: 12.5px; color: var(--dim); margin-top: 1px; }
+  .kp svg { width: 16px; height: 16px; color: var(--halo); }
+  .or { display: flex; align-items: center; gap: 12px; margin: 16px 0 12px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .join input { font: inherit; font-size: 16px; width: 100%; padding: 14px; margin-bottom: 8px; border-radius: 14px; border: 1px solid rgba(255,255,255,.14); background: rgba(3,5,12,.5); color: var(--fg); outline: none; transition: border-color .15s, box-shadow .15s; }
+  .join input::placeholder { color: var(--faint); }
+  .join input:focus { border-color: var(--halo); box-shadow: 0 0 0 3px rgba(143,176,255,.22); }
+  .join input.err { border-color: #ff6b6b; box-shadow: 0 0 0 3px rgba(255,107,107,.18); }
+  .join > button { display: flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-weight: 700; font-size: 16.5px; width: 100%; padding: 15px; margin-top: 4px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #fff, #dfe6fb); color: #0a1024; cursor: pointer; box-shadow: 0 14px 26px -16px rgba(143,176,255,.9), inset 0 -2px 0 rgba(10,16,36,.12); transition: transform .12s; }
+  .join > button:active { transform: scale(.98); }
+  .join > button svg { width: 17px; height: 17px; }
+  .join small { display: block; margin-top: 11px; font-size: 11.5px; color: var(--faint); text-align: center; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+  .top, .intro, .join { animation: rise .7s cubic-bezier(.2,.8,.2,1) backwards; }
+  .intro { animation-delay: .08s; } .join { animation-delay: .18s; }
+
+  /* Wide screens: the eclipse fills the top right; title sits low on the left, sign-in low on the right. */
+  @media (min-width: 980px) {
+    .wrap { max-width: 1520px; min-height: 100vh; display: flex; flex-direction: column; padding: 44px clamp(56px, 7.5vw, 140px) 0; }
+    .bs-full { --lh: 25px; gap: 24px; }
+    .bs-full > * + * { padding-left: 24px; }
+    .hero { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 430px); gap: clamp(48px, 6vw, 110px); align-items: end; padding: 40px 0 clamp(56px, 11vh, 130px); }
+    .eclipse { --d: min(86vh, 58vw); right: calc(var(--d) * -.2); top: calc(var(--d) * -.24); }
+    h1 { font-size: clamp(64px, 7.6vw, 136px); margin: 0 0 28px; }
+    .lede { font-size: clamp(19px, 1.5vw, 23px); max-width: 30ch; margin: 0; }
+    .join { padding: 28px 26px 20px; }
+    .join h2 { font-size: 26px; margin-bottom: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="sky" aria-hidden="true"><canvas id="stars"></canvas><div class="eclipse"><i class="rays"></i><i class="glow"></i><i class="ring"></i><i class="disc"></i><i class="bead"></i></div></div>
+<div class="wrap">
+  <header class="top"><span id="logos"></span></header>
+  <main class="hero">
+    <div class="intro">
+      <h1 aria-label="The AI Blind Spot"><small aria-hidden="true">The AI</small><span aria-hidden="true">Blind Sp<i class="spot"></i>t</span></h1>
+      <p class="lede">Your AI is only as smart as the information it can reach. <b>Three quick games. Beat the room.</b></p>
+    </div>
+    <form class="join" id="join" autocomplete="on">
+      <h2>Who's playing?</h2>
+      <div id="known" hidden>
+        <p class="kl">Played before? Pick your name.</p>
+        <div class="klist" id="klist"></div>
+        <p class="or">or enter as someone new</p>
+      </div>
+      <input id="nm" autocomplete="given-name" placeholder="First name" maxlength="24" aria-label="First name">
+      <input id="co" autocomplete="organization" placeholder="Company" maxlength="32" aria-label="Company">
+      <button type="submit">Enter<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <small>Your name and company appear on the event leaderboard.</small>
+    </form>
+  </main>
+</div>
+<script src="shared/common.js?v=13"></script>
+<script>
+  const next = BS.params.get('next'), dest = next && /^[a-z0-9-]+\.html$/.test(next) ? next : 'games.html';
+  if (BS.hasPlayer()) location.replace(dest); // already signed in on this device: go straight to the games
+  document.getElementById('logos').innerHTML = BS.LOGOS_FULL;
+  const join = document.getElementById('join'), nm = document.getElementById('nm'), co = document.getElementById('co');
+  const known = document.getElementById('known'), klist = document.getElementById('klist');
+  const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+  let shown = [];
+  function drawKnown() { // returning players: pick yourself instead of typing again
+    const q = nm.value.trim().toLowerCase();
+    shown = BS.players().filter(p => p.name && p.company && (!q || p.name.toLowerCase().startsWith(q))).slice(0, 4);
+    known.hidden = !shown.length;
+    klist.innerHTML = shown.map((p, i) => `<button type="button" class="kp" data-i="${i}"><span><b>${BS.esc(p.name)}</b><span>${BS.esc(p.company)}</span></span>${ARROW}</button>`).join('');
+  }
+  const enter = (name, company) => { BS.setPlayer(name, company); if (document.activeElement) document.activeElement.blur(); location.href = dest; };
+  klist.addEventListener('click', e => { const b = e.target.closest('.kp'); if (b) { const p = shown[+b.dataset.i]; enter(p.name, p.company); } });
+  nm.addEventListener('input', drawKnown);
+  join.addEventListener('submit', e => {
+    e.preventDefault();
+    let ok = true;
+    [nm, co].forEach(i => { const bad = !i.value.trim(); i.classList.toggle('err', bad); if (bad && ok) { i.focus(); ok = false; } });
+    if (ok) enter(nm.value, co.value);
+  });
+  drawKnown();
+
+  // Sky: still stars that twinkle, and slow points of light that drift across and pass behind the eclipse.
+  (() => {
+    const cv = document.getElementById('stars'), c = cv.getContext('2d');
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let W = 0, H = 0, stars = [], motes = [], last = 0;
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    function size() {
+      const d = Math.min(2, devicePixelRatio || 1);
+      W = innerWidth; H = innerHeight; cv.width = W * d; cv.height = H * d; c.setTransform(d, 0, 0, d, 0, 0);
+      const n = Math.round(Math.min(150, W * H / 9000));
+      stars = Array.from({ length: n }, () => ({ x: rnd(0, W), y: rnd(0, H), r: rnd(.4, 1.3), a: rnd(.15, .7), p: rnd(0, 6.28), s: rnd(.4, 1.6) }));
+      motes = Array.from({ length: Math.round(n * .45) }, () => ({ x: rnd(0, W), y: rnd(0, H), r: rnd(.9, 2.2), v: rnd(8, 26), w: rnd(0, 6.28), a: rnd(.35, .9) }));
+    }
+    function frame(t) {
+      const dt = Math.min(.05, (t - last) / 1000 || 0); last = t;
+      c.clearRect(0, 0, W, H);
+      for (const s of stars) { c.globalAlpha = s.a * (.55 + .45 * Math.sin(t / 1000 * s.s + s.p)); c.fillStyle = '#dfe8ff'; c.beginPath(); c.arc(s.x, s.y, s.r, 0, 7); c.fill(); }
+      for (const m of motes) {
+        m.x += m.v * dt; m.y -= m.v * .28 * dt + Math.sin(t / 1400 + m.w) * .06;
+        if (m.x > W + 12) { m.x = -12; m.y = rnd(H * .1, H * 1.15); } if (m.y < -12) { m.y = H + 12; m.x = rnd(-W * .2, W * .8); }
+        const g = c.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 5);
+        g.addColorStop(0, 'rgba(190,212,255,' + m.a + ')'); g.addColorStop(.25, 'rgba(143,176,255,' + m.a * .45 + ')'); g.addColorStop(1, 'rgba(143,176,255,0)');
+        c.globalAlpha = 1; c.fillStyle = g; c.beginPath(); c.arc(m.x, m.y, m.r * 5, 0, 7); c.fill();
+      }
+      if (!calm) requestAnimationFrame(frame);
+    }
+    size(); addEventListener('resize', size); requestAnimationFrame(frame);
+  })();
+</script>
+</body>
+</html>

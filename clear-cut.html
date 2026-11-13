@@ -1,0 +1,1265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Clear Cut</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/common.css?v=13">
+<style>
+  :root {
+    --bg: #eef2f9; --fg: #1d2540; --accent: #2b3a8f; --on-accent: #ffffff;
+    --card: rgba(255, 255, 255, .8); --line: rgba(29, 37, 64, .12); --chip: rgba(29, 37, 64, .05);
+    --input: rgba(255, 255, 255, .9); --scrim: rgba(230, 236, 247, .35); --shadow: 0 24px 60px rgba(40, 55, 110, .18);
+    --demo-bg: #eef2f9;
+    --font-display: Inter, -apple-system, sans-serif; --font-ui: Inter, -apple-system, sans-serif;
+    --display-weight: 700; --display-tracking: -.025em;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shared/common.js?v=13"></script>
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const DURATION = +(BS.params.get('t') || 75), LIVES = 3;
+  const INK = '#1d2540', SLATE = '#56648a', TAU = Math.PI * 2;
+  const FONT = 'Inter, -apple-system, sans-serif'; // one typeface across the set
+  const DPR = Math.min(2, window.devicePixelRatio || 1);
+  const HUD_Y = 42, LIFE_R = 10.5, MAX_SHARDS = 150, MAX_PARTS = 150;
+  const PRISM = ['#ff5fa2', '#ffb02e', '#1fc8ac', '#4f8dfa', '#9166f5'];
+  const SPARK = ['255,110,170', '255,186,72', '40,204,178', '98,150,255', '160,124,250'];
+  const BARRIERS = [{ k: 'silo', t: 'SILO' }, { k: 'legacy', t: 'LEGACY' }, { k: 'hidden', t: 'HIDDEN' }, { k: 'scatter', t: 'SCATTERED' }];
+  // Each barrier is its own tint of glass.
+  const TINT = {
+    silo: { rgb: '98,146,250', lite: '216,229,255', deep: '44,74,160', ink: '#2c4a9c' },
+    legacy: { rgb: '184,164,146', lite: '240,233,226', deep: '104,84,68', ink: '#6b5442' },
+    hidden: { rgb: '152,116,244', lite: '232,223,255', deep: '84,56,170', ink: '#5438a6' },
+    scatter: { rgb: '44,190,174', lite: '208,245,238', deep: '16,112,104', ink: '#127268' },
+  };
+  const DOCS = [
+    { t: 'Contract', c: '#7c9cff' }, { t: 'Invoice', c: '#5eead4' }, { t: 'Email thread', c: '#ffb86b' },
+    { t: 'Customer record', c: '#ff7eb3' }, { t: 'Case file', c: '#a78bfa' }, { t: 'Supplier notice', c: '#ffd166' },
+    { t: 'Order history', c: '#60c5ff' }, { t: 'Policy', c: '#8ee08e' },
+  ];
+  const BLOBS = [
+    { c: '146,176,255', bx: .12, by: .2, r: .64, f: .21, ph: 0 },
+    { c: '255,180,210', bx: .92, by: .36, r: .56, f: .17, ph: 2 },
+    { c: '162,232,214', bx: .2, by: .82, r: .6, f: .13, ph: 4 },
+    { c: '255,220,150', bx: .88, by: .93, r: .5, f: .19, ph: 1 },
+    { c: '204,178,255', bx: .56, by: .56, r: .4, f: .11, ph: 3 },
+  ];
+  const RAYS = [{ x: .0, a: -.46, w: .2, al: .8, ph: 0 }, { x: .34, a: -.4, w: .08, al: .6, ph: 2 }, { x: .58, a: -.5, w: .24, al: .7, ph: 4 }, { x: .95, a: -.44, w: .12, al: .5, ph: 5 }];
+  const BOKEH = [
+    { x: .16, y: .1, r: .2, f: .09, ph: 0, v: 7, al: .5 }, { x: .82, y: .32, r: .13, f: .12, ph: 1, v: 10, al: .6 },
+    { x: .42, y: .52, r: .26, f: .07, ph: 2, v: 5, al: .34 }, { x: .9, y: .7, r: .17, f: .1, ph: 3, v: 8, al: .5 },
+    { x: .1, y: .64, r: .1, f: .14, ph: 4, v: 12, al: .65 }, { x: .64, y: .9, r: .15, f: .08, ph: 5, v: 9, al: .5 },
+    { x: .3, y: .3, r: .07, f: .16, ph: 6, v: 14, al: .7 },
+  ];
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const back = t => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
+  const seeded = seed => () => {
+    seed = seed + 0x6D2B79F5 | 0;
+    let x = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x;
+    return ((x ^ x >>> 14) >>> 0) / 4294967296;
+  };
+  // Shake and flashes are toned down when the device asks for reduced motion.
+  const rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  let RM = !!(rmq && rmq.matches);
+  if (rmq && rmq.addEventListener) rmq.addEventListener('change', e => { RM = e.matches; });
+
+  let ctx, W, H, PW, PH, SR, hintY = 0, timerGrad = null, fadeGrad = null;
+  let items = [], shards = [], reveals = [], pops = [], parts = [], trail = [], fx = [];
+  let running = false, over = false, time = 0, clock = 0, score = 0, lives = LIVES;
+  let cleared = 0, approved = 0, breaches = 0, seen = 0, spawnCd = .4, flash = 0, trayPulse = 0, sealHints = 0, bestCombo = 0, warnSec = 0;
+  let shake = 0, lifeFx = null, shownScore = 0, scoreT = -9, overAt = 0;
+  let ptr = null;
+
+  function resize() {
+    ({ ctx, w: W, h: H } = BS.fit(cv));
+    PW = clamp(W * .25, 82, 118); PH = PW * 1.28; SR = PW * .37;
+    timerGrad = ctx.createLinearGradient(0, 0, W, 0);
+    PRISM.forEach((c, i) => timerGrad.addColorStop(i / 4, c));
+    fadeGrad = ctx.createLinearGradient(0, 0, 0, 104);
+    fadeGrad.addColorStop(0, 'rgba(241,244,253,.8)'); fadeGrad.addColorStop(1, 'rgba(241,244,253,0)');
+    placeHint();
+  }
+  // The shell's mode pill sits at bottom-centre; keep the opening hint above it.
+  function placeHint() {
+    const r = BS.pill && BS.pill.getBoundingClientRect();
+    hintY = Math.min(H - 60, r && r.height > 16 ? r.top - 14 : H);
+  }
+
+  // ---------- spawning: panes and seals rise like bubbles ----------
+  function spawn(p) {
+    const seal = Math.random() < .2 + .12 * p;
+    const half = seal ? SR : PW / 2;
+    let x0 = rand(half + 12, W - half - 12);
+    for (let i = 0; i < 6; i++) {
+      if (!items.some(o => o.y > H - PH && Math.abs(o.x0 - x0) < PW)) break;
+      x0 = rand(half + 12, W - half - 12);
+    }
+    const it = {
+      kind: seal ? 'seal' : 'pane', x0, x: x0, y: H + (seal ? SR : PH / 2) + 8,
+      vy: -(rand(112, 150) + 95 * p), swayA: rand(6, 20), swayF: rand(.5, 1.1), ph: rand(0, 6),
+      rot: rand(-.12, .12), vr: rand(-.12, .12), age: 0, state: 'live', t: 0,
+    };
+    if (seal) { if (sealHints < 2) { it.hint = true; sealHints++; } }
+    else { it.b = pick(BARRIERS); it.doc = pick(DOCS); }
+    items.push(it);
+  }
+
+  // ---------- input ----------
+  cv.addEventListener('pointerdown', e => {
+    if (!running || ptr) return;
+    ptr = { id: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), moved: false, hits: 0 };
+    trail = [{ x: ptr.x, y: ptr.y, t: clock }];
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+    for (const ev of evs) {
+      const qx = ev.clientX, qy = ev.clientY;
+      if (!ptr.moved && Math.hypot(qx - ptr.sx, qy - ptr.sy) > 12) { ptr.moved = true; cutSegment(ptr.sx, ptr.sy, qx, qy); }
+      else if (ptr.moved) cutSegment(ptr.x, ptr.y, qx, qy);
+      if (!ptr) return; // the cut ended the round
+      ptr.x = qx; ptr.y = qy;
+      trail.push({ x: qx, y: qy, t: clock });
+    }
+  });
+  const release = e => {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    if (running && !ptr.moved && performance.now() - ptr.t < 400) tap(ptr.sx, ptr.sy);
+    if (running && ptr.hits >= 2) combo(ptr.hits, ptr.x, ptr.y);
+    ptr = null;
+  };
+  cv.addEventListener('pointerup', release);
+  cv.addEventListener('pointercancel', release);
+
+  function inPane(it, x, y) {
+    const c = Math.cos(-it.rot), s = Math.sin(-it.rot), dx = x - it.x, dy = y - it.y;
+    const lx = dx * c - dy * s, ly = dx * s + dy * c;
+    return Math.abs(lx) <= PW / 2 && Math.abs(ly) <= PH / 2;
+  }
+  function segDist(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+    const t = clamp(((px - ax) * vx + (py - ay) * vy) / l2, 0, 1);
+    return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
+  }
+  function cutSegment(ax, ay, bx, by) {
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 6));
+    for (const it of items) {
+      if (it.state !== 'live') continue;
+      if (it.kind === 'seal') {
+        if (segDist(it.x, it.y, ax, ay, bx, by) < SR * .82) breach(it);
+        continue;
+      }
+      for (let i = 0; i <= steps; i++) {
+        if (inPane(it, ax + (bx - ax) * i / steps, ay + (by - ay) * i / steps)) { cutPane(it, ax, ay, bx, by); break; }
+      }
+    }
+  }
+
+  // Effects only: capped so a long combo never floods the frame.
+  function addPart(q) { parts.push(q); if (parts.length > MAX_PARTS) parts.shift(); }
+  function glints(x, y, n, speed, life, size) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU), v = rand(.35, 1) * speed, l = rand(.6, 1) * life;
+      addPart({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: l, max: l, size: rand(.6, 1) * size, glint: pick(SPARK) });
+    }
+  }
+
+  function cutPane(it, ax, ay, bx, by) {
+    it.state = 'dead'; cleared++; score += 10;
+    if (ptr) { ptr.hits++; bestCombo = Math.max(bestCombo, ptr.hits); }
+    shards.push(...makeShards(it, PW, ax, ay, bx, by, Math.random));
+    if (shards.length > MAX_SHARDS) shards.splice(0, shards.length - MAX_SHARDS);
+    reveals.push({ x: it.x, y: it.y, rot: it.rot, doc: it.doc, t: 0 });
+    const cp = cutPoint(it, PW, ax, ay, bx, by);
+    fx.push({ type: 'slash', x: cp.x, y: cp.y, ang: Math.atan2(by - ay, bx - ax), len: PW * 2.3, t: 0, dur: .3 });
+    glints(cp.x, cp.y, 5, 420, .55, .5);
+    pop(it.x, it.y - PH / 2 - 8, '+10', 15, SLATE);
+    BS.sfx('cut');
+    BS.vibrate(8);
+  }
+  // Where a swipe a→b crosses a pane: the projection of its centre on the swipe line, kept inside the pane.
+  function cutPoint(it, pw, ax, ay, bx, by) {
+    const len = Math.hypot(bx - ax, by - ay) || 1, dx = (bx - ax) / len, dy = (by - ay) / len;
+    const t = (it.x - ax) * dx + (it.y - ay) * dy;
+    let x = ax + dx * t, y = ay + dy * t;
+    const off = Math.hypot(x - it.x, y - it.y), lim = pw * .3;
+    if (off > lim) { x = it.x + (x - it.x) / off * lim; y = it.y + (y - it.y) / off * lim; }
+    return { x, y, dx, dy };
+  }
+  // Glass shards for a pane of width pw cut along a→b. rnd lets the tutorial use a seeded source.
+  function makeShards(it, pw, ax, ay, bx, by, rnd) {
+    const R = (a, b) => a + rnd() * (b - a), out = [];
+    const { x: cx, y: cy, dx, dy } = cutPoint(it, pw, ax, ay, bx, by);
+    // perimeter points (corners + one random point per edge), rotated into world space
+    const hw = pw / 2, hh = pw * 1.28 / 2, loc = [];
+    const corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+    for (let i = 0; i < 4; i++) {
+      const a = corners[i], b = corners[(i + 1) % 4], k = R(.3, .7);
+      loc.push(a, [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]);
+    }
+    const c = Math.cos(it.rot), s = Math.sin(it.rot);
+    const P = loc.map(([x, y]) => ({ x: it.x + x * c - y * s, y: it.y + x * s + y * c }));
+    const piece = (pts, boost) => {
+      let gx = 0, gy = 0;
+      for (const p of pts) { gx += p.x; gy += p.y; }
+      gx /= pts.length; gy /= pts.length;
+      const ox = gx - cx, oy = gy - cy, ol = Math.hypot(ox, oy) || 1, sp = R(70, 210) * boost, hue = R(0, 360);
+      const tone = SPARK[Math.floor(hue / 72) % 5];
+      out.push({
+        x: gx, y: gy, pts: pts.map(p => [p.x - gx, p.y - gy]),
+        vx: ox / ol * sp + dx * R(60, 160), vy: oy / ol * sp + dy * R(60, 160) - R(40, 120),
+        rot: 0, vr: R(-5, 5), life: 1, hue, k: it.b.k, col: `rgba(${tone},.78)`,
+      });
+    };
+    // each wedge from the cut point breaks once more, into an inner splinter and an outer plate
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i], b = P[(i + 1) % P.length], k1 = R(.36, .62), k2 = R(.36, .62);
+      const a1 = { x: cx + (a.x - cx) * k1, y: cy + (a.y - cy) * k1 }, b1 = { x: cx + (b.x - cx) * k2, y: cy + (b.y - cy) * k2 };
+      piece([{ x: cx, y: cy }, a1, b1], .65);
+      piece([a1, a, b, b1], 1);
+    }
+    return out;
+  }
+
+  function breach(it) {
+    it.state = 'breach'; it.t = 0; lives--; breaches++; flash = .45;
+    shake = 1; lifeFx = { i: lives, t: 0 };
+    fx.push({ type: 'breach', x: it.x, y: it.y, t: 0, dur: .5 });
+    for (let i = 0; i < 10; i++) { const a = rand(0, TAU), v = rand(90, 260); addPart({ x: it.x, y: it.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5, max: .5, size: rand(1.6, 3), color: i % 2 ? '#e5484d' : '#ff9a8f' }); }
+    pop(it.x, it.y - SR - 14, 'Governance breached', 17, '#d63c4a', 1.4);
+    BS.sfx('breach');
+    BS.vibrate([30, 40, 60]);
+    if (lives <= 0) end();
+  }
+  function tap(x, y) {
+    let best = null, bd = Infinity;
+    for (const it of items) {
+      if (it.kind !== 'seal' || it.state !== 'live') continue;
+      const d = Math.hypot(it.x - x, it.y - y);
+      if (d < SR + 16 && d < bd) { best = it; bd = d; }
+    }
+    if (!best) return;
+    best.state = 'approved'; best.t = 0; approved++; score += 25;
+    pop(best.x, best.y - SR * 1.75 - 14, 'Approved +25', 16, '#0e8a68');
+    fx.push({ type: 'approve', x: best.x, y: best.y, t: 0, dur: .7 });
+    for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; addPart({ x: best.x, y: best.y, vx: Math.cos(a) * 180, vy: Math.sin(a) * 180, life: .5, max: .5, size: 2.4, color: i % 2 ? '#e0b04a' : '#2fbf96' }); }
+    BS.sfx('approve');
+    BS.vibrate(10);
+  }
+  function combo(n, x, y) {
+    const b = 10 * n * (n - 1);
+    score += b; bestCombo = Math.max(bestCombo, n);
+    pop(x, y - 40, `×${n}`, n >= 4 ? 26 : 20, '#2b3a8f', 1.3, { tail: 'clear view', sub: `+${b}` });
+    glints(clamp(x, 90, W - 90), Math.max(120, y - 40), 8, 520, .7, .62);
+    BS.sfx('combo', { n });
+  }
+  function pop(x, y, text, size, color, life = 1, big = null) {
+    pops.push({ x: clamp(x, 80, W - 80), y: Math.max(big ? 122 : 92, y), text, size, color, life, max: life, big });
+  }
+
+  // ---------- flow ----------
+  function start() {
+    items = []; shards = []; reveals = []; pops = []; parts = []; trail = []; fx = [];
+    time = 0; score = 0; lives = LIVES; cleared = 0; approved = 0; breaches = 0; seen = 0; bestCombo = 0; warnSec = 0;
+    spawnCd = .3; sealHints = 0; flash = 0; ptr = null; over = false; running = true;
+    shake = 0; lifeFx = null; shownScore = 0; scoreT = -9;
+    placeHint();
+    prewarm();
+  }
+  // One plain-English line that ties the round back to the theme.
+  function takeaway() {
+    const times = n => n === 1 ? 'once' : n === 2 ? 'twice' : n === 3 ? 'three times' : `${n} times`;
+    const what = cleared ? `${BS.pl(cleared, 'barrier')} cleared` : 'No barriers cleared';
+    if (lives <= 0) return `${what}, and three governance breaches ended the round.`;
+    if (breaches) return `${what}, ${cleared ? 'but' : 'and'} governance was breached ${times(breaches)}.`;
+    if (!cleared) return 'No barriers cleared, so your AI is still looking at frosted glass.';
+    if (approved) return `${what}, ${BS.pl(approved, 'seal')} approved and governance intact.`;
+    return `${what} and governance intact.`;
+  }
+  function end() {
+    if (over) return;
+    running = false; over = true; ptr = null; overAt = clock;
+    setTimeout(() => BS.finish({
+      score,
+      headline: lives <= 0 ? 'Governance breached' : 'Time',
+      theme: takeaway(),
+      stats: { cleared, approved, combo: bestCombo, breaches },
+      win: false,
+    }), 900);
+  }
+
+  function update(dt) {
+    clock += dt;
+    if (running) {
+      time += dt;
+      const left = DURATION - time;
+      if (left > 0 && left <= 5 && Math.ceil(left) !== warnSec) { warnSec = Math.ceil(left); BS.sfx('warn'); }
+      if (time >= DURATION) end();
+    }
+    const p = running ? clamp(time / DURATION, 0, 1) : 0;
+    spawnCd -= dt;
+    if (!over && spawnCd <= 0) {
+      spawn(p);
+      if (running && Math.random() < .15 + .2 * p) spawn(p);
+      spawnCd = running ? lerp(.95, .42, p) : 1.4;
+    }
+    for (const it of items) {
+      it.age += dt; it.t += dt;
+      if (it.state === 'live') {
+        it.y += it.vy * dt; it.x = it.x0 + Math.sin(it.age * it.swayF * 2 + it.ph) * it.swayA; it.rot += it.vr * dt;
+      }
+    }
+    items = items.filter(it => (it.state === 'live' && it.y > -PH) || (it.state === 'breach' && it.t < .9) || (it.state === 'approved' && it.t < .5));
+    for (const s of shards) { s.life -= dt * 1.1; s.vy += 900 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.rot += s.vr * dt; }
+    shards = shards.filter(s => s.life > 0 && s.y < H + 80);
+    for (const r of reveals) {
+      r.t += dt;
+      if (r.t >= 1.05 && !r.done) {
+        r.done = true; seen++; trayPulse = 1;
+        for (let i = 0; i < 5; i++) { const a = rand(.15, Math.PI - .15), v = rand(60, 150); addPart({ x: W / 2 + rand(-30, 30), y: HUD_Y + 8, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .45, max: .45, size: rand(1.4, 2.4), color: r.doc.c }); }
+      }
+    }
+    reveals = reveals.filter(r => !r.done);
+    for (const q of parts) { q.life -= dt; q.vx *= .9; q.vy *= .9; q.x += q.vx * dt; q.y += q.vy * dt; }
+    parts = parts.filter(q => q.life > 0);
+    for (const q of pops) { q.life -= dt; q.y -= (q.big ? 14 : 28) * dt; }
+    pops = pops.filter(q => q.life > 0);
+    for (const f of fx) f.t += dt;
+    fx = fx.filter(f => f.t < f.dur);
+    trail = trail.filter(q => clock - q.t < .16);
+    flash = Math.max(0, flash - dt); trayPulse = Math.max(0, trayPulse - dt * 3);
+    shake = Math.max(0, shake - dt * 3.2);
+    if (lifeFx && (lifeFx.t += dt) > .75) lifeFx = null;
+  }
+
+  // ---------- sprites: glass, glows and cards are painted once, then stamped with drawImage ----------
+  const sprites = new Map();
+  function sprite(key, w, h, paint, scale = DPR) {
+    let s = sprites.get(key);
+    if (!s) {
+      if (sprites.size > 180) sprites.clear();
+      const el = document.createElement('canvas');
+      el.width = Math.max(1, Math.ceil(w * scale)); el.height = Math.max(1, Math.ceil(h * scale));
+      const c = el.getContext('2d');
+      c.scale(scale, scale);
+      s = { el, w, h, data: null };
+      s.data = paint(c, w, h) || null;
+      sprites.set(key, s);
+    }
+    return s;
+  }
+  const put = (c, s, x = 0, y = 0, k = 1) => c.drawImage(s.el, x - s.w * k / 2, y - s.h * k / 2, s.w * k, s.h * k);
+  // Gradients are cached per context, defined in an object's own space.
+  const gradCache = new WeakMap();
+  function grad(c, key, make) {
+    let m = gradCache.get(c);
+    if (!m) gradCache.set(c, m = new Map());
+    let g = m.get(key);
+    if (!g) { if (m.size > 60) m.clear(); m.set(key, g = make()); }
+    return g;
+  }
+  // Text baked into sprites must use the real typeface, so repaint once it has loaded (while the intro card is up).
+  if (document.fonts && document.fonts.load) {
+    const repaint = () => { sprites.clear(); if (PW) prewarm(); };
+    Promise.all(['500', '600', '700'].map(wt => document.fonts.load(`${wt} 12px Inter`))).then(repaint, repaint);
+  }
+  const mctx = document.createElement('canvas').getContext('2d');
+
+  function rr(c, x, y, w, h, r, begin = true) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    if (begin) c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+  // Paints only the blurred shadow of whatever paint() fills (sprite contexts only: scale and translate, no rotation).
+  function shadowOnly(c, color, blur, dx, dy, paint) {
+    const OFF = 3000;
+    c.save();
+    c.shadowColor = color; c.shadowBlur = blur * DPR; c.shadowOffsetX = (OFF + dx) * DPR; c.shadowOffsetY = dy * DPR;
+    c.translate(-OFF, 0); c.fillStyle = '#000';
+    paint(); c.restore();
+  }
+  function spaced(c, text, x, y, sp, left = false) {
+    let w = -sp;
+    for (const ch of text) w += c.measureText(ch).width + sp;
+    let px = left ? x : x - w / 2;
+    c.textAlign = 'left';
+    for (const ch of text) { c.fillText(ch, px, y); px += c.measureText(ch).width + sp; }
+  }
+  function prismRim(c, w, h) {
+    let g;
+    if (c.createConicGradient) {
+      g = c.createConicGradient(-2.2, 0, 0);
+      [...PRISM, PRISM[0]].forEach((col, i) => g.addColorStop(i / 5, col));
+    } else {
+      g = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      PRISM.forEach((col, i) => g.addColorStop(i / 4, col));
+    }
+    return g;
+  }
+
+  const glow = rgb => sprite('glow:' + rgb, 128, 128, c => {
+    const g = c.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, `rgba(${rgb},1)`); g.addColorStop(.35, `rgba(${rgb},.5)`); g.addColorStop(.7, `rgba(${rgb},.12)`); g.addColorStop(1, `rgba(${rgb},0)`);
+    c.fillStyle = g; c.fillRect(0, 0, 128, 128);
+  }, 1);
+  const star = c => { c.beginPath(); c.moveTo(0, -19); c.quadraticCurveTo(1.6, -1.6, 19, 0); c.quadraticCurveTo(1.6, 1.6, 0, 19); c.quadraticCurveTo(-1.6, 1.6, -19, 0); c.quadraticCurveTo(-1.6, -1.6, 0, -19); };
+  const glintSprite = rgb => sprite('glint:' + rgb, 40, 40, c => {
+    c.translate(20, 20);
+    let g = c.createRadialGradient(0, 0, 0, 0, 0, 20);
+    g.addColorStop(0, `rgba(${rgb},1)`); g.addColorStop(.55, `rgba(${rgb},.8)`); g.addColorStop(1, `rgba(${rgb},0)`);
+    c.fillStyle = g; star(c); c.fill();
+    g = c.createRadialGradient(0, 0, 0, 0, 0, 8);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, 8, 0, TAU); c.fill();
+    c.scale(.55, .55); c.fillStyle = '#fff'; star(c); c.fill();
+  });
+  const slashSprite = () => sprite('slash', 256, 40, c => {
+    c.save(); c.translate(128, 20); c.scale(1, 20 / 128);
+    let g = c.createRadialGradient(0, 0, 0, 0, 0, 128);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.5, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(-128, -128, 256, 256); c.restore();
+    c.globalCompositeOperation = 'source-in';
+    g = c.createLinearGradient(0, 0, 256, 0);
+    PRISM.forEach((col, i) => g.addColorStop(i / 4, col));
+    c.fillStyle = g; c.fillRect(0, 0, 256, 40);
+    c.globalCompositeOperation = 'source-over';
+    c.translate(128, 20); c.scale(1, 4 / 112);
+    g = c.createRadialGradient(0, 0, 0, 0, 0, 112);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.6, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(-112, -112, 224, 224);
+  });
+  const vignette = () => sprite('vignette', 96, 96, c => {
+    const g = c.createRadialGradient(48, 48, 0, 48, 48, 68);
+    g.addColorStop(0, 'rgba(229,72,77,0)'); g.addColorStop(.58, 'rgba(229,72,77,0)'); g.addColorStop(.82, 'rgba(229,72,77,.26)'); g.addColorStop(1, 'rgba(214,48,62,.66)');
+    c.fillStyle = g; c.fillRect(0, 0, 96, 96);
+  }, 1);
+  // Frosted backing for HUD and labels, so panes passing behind never hurt readability.
+  function pillSprite(w, h, r = h / 2) {
+    const pad = 16;
+    return sprite(`pill:${w}:${h}:${r}`, w + pad * 2, h + pad * 2, c => {
+      c.translate(pad + w / 2, pad + h / 2);
+      shadowOnly(c, 'rgba(44,60,120,.26)', 9, 0, 4, () => { rr(c, -w / 2, -h / 2, w, h, r); c.fill(); });
+      let g = c.createLinearGradient(0, -h / 2, 0, h / 2);
+      g.addColorStop(0, 'rgba(255,255,255,.96)'); g.addColorStop(1, 'rgba(244,247,255,.86)');
+      c.fillStyle = g; rr(c, -w / 2, -h / 2, w, h, r); c.fill();
+      c.lineWidth = 1; c.strokeStyle = 'rgba(60,78,140,.16)'; rr(c, -w / 2, -h / 2, w, h, r); c.stroke();
+      g = c.createLinearGradient(0, -h / 2, 0, h / 2);
+      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.5, 'rgba(255,255,255,0)');
+      c.strokeStyle = g; c.lineWidth = 1.2; rr(c, -w / 2 + 1.2, -h / 2 + 1.2, w - 2.4, h - 2.4, r - 1.2); c.stroke();
+    });
+  }
+  function labelSprite(text, font, color, h = 28) {
+    const key = `label:${text}:${font}:${color}`, hit = sprites.get(key);
+    if (hit) return hit;
+    mctx.font = font;
+    const w = Math.ceil(mctx.measureText(text).width) + 28, pill = pillSprite(w, h);
+    return sprite(key, pill.w, pill.h, c => {
+      c.drawImage(pill.el, 0, 0, pill.w, pill.h);
+      c.fillStyle = color; c.font = font; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(text, pill.w / 2, pill.h / 2 + .5);
+    });
+  }
+
+  // ---------- drawing helpers (all take the context, so the tutorial can reuse them) ----------
+  // Background: a low-res buffer holds the aurora and light rays (all soft, so it upscales cleanly); bokeh goes on top.
+  const bgs = new Map();
+  function bgBuffer(w, h) {
+    const key = w + 'x' + h;
+    let b = bgs.get(key);
+    if (!b) {
+      if (bgs.size > 5) bgs.clear();
+      const bw = Math.max(2, Math.ceil(w * .25)), bh = Math.max(2, Math.ceil(h * .25));
+      const mk = () => { const el = document.createElement('canvas'); el.width = bw; el.height = bh; return el; };
+      const base = mk(), buf = mk(), g = base.getContext('2d'), m = Math.max(w, h);
+      g.scale(bw / w, bh / h);
+      let gr = g.createLinearGradient(0, 0, w * .35, h);
+      gr.addColorStop(0, '#f1f4ff'); gr.addColorStop(.55, '#edf0fb'); gr.addColorStop(1, '#f6f0f6');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      b = { base, buf, g: buf.getContext('2d'), sx: bw / w, sy: bh / h, sun: [w * .06, -h * .04, m * .8] };
+      bgs.set(key, b);
+    }
+    return b;
+  }
+  const blobSprite = rgb => sprite('blob:' + rgb, 96, 96, c => {
+    const g = c.createRadialGradient(48, 48, 0, 48, 48, 48);
+    g.addColorStop(0, `rgba(${rgb},.8)`); g.addColorStop(.3, `rgba(${rgb},.56)`); g.addColorStop(.65, `rgba(${rgb},.17)`); g.addColorStop(1, `rgba(${rgb},0)`);
+    c.fillStyle = g; c.fillRect(0, 0, 96, 96);
+  }, 1);
+  const raySprite = () => sprite('ray', 64, 128, c => {
+    let g = c.createLinearGradient(0, 0, 64, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.3, 'rgba(255,255,255,.55)'); g.addColorStop(.5, 'rgba(255,255,255,1)'); g.addColorStop(.7, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 64, 128);
+    c.globalCompositeOperation = 'destination-in';
+    g = c.createLinearGradient(0, 0, 0, 128);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(.6, 'rgba(0,0,0,.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 64, 128);
+  }, 1);
+  const bokehSprite = () => sprite('bokeh', 128, 128, c => {
+    const g = c.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(255,255,255,.34)'); g.addColorStop(.74, 'rgba(255,255,255,.4)'); g.addColorStop(.9, 'rgba(255,255,255,.78)'); g.addColorStop(.97, 'rgba(255,255,255,.2)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 128, 128);
+  }, 1);
+  function drawBg(c, w, h, t) {
+    const b = bgBuffer(w, h), g = b.g, m = Math.max(w, h);
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
+    g.drawImage(b.base, 0, 0);
+    g.setTransform(b.sx, 0, 0, b.sy, 0, 0);
+    for (const o of BLOBS) {
+      const x = w * (o.bx + Math.sin(t * o.f + o.ph) * .08), y = h * (o.by + Math.cos(t * o.f * .8 + o.ph) * .06), r = m * o.r * .62;
+      g.drawImage(blobSprite(o.c).el, x - r, y - r, r * 2, r * 2);
+    }
+    // sunlight from the top-left, and faint diagonal rays
+    g.globalAlpha = .9; g.drawImage(glow('255,255,255').el, b.sun[0] - b.sun[2], b.sun[1] - b.sun[2], b.sun[2] * 2, b.sun[2] * 2);
+    const ray = raySprite().el;
+    for (const o of RAYS) {
+      g.save(); g.translate(w * o.x, -h * .1); g.rotate(o.a + Math.sin(t * .07 + o.ph) * .03);
+      g.globalAlpha = o.al * (.72 + .28 * Math.sin(t * .23 + o.ph));
+      g.drawImage(ray, -m * o.w / 2, 0, m * o.w, m * 1.3); g.restore();
+    }
+    c.drawImage(b.buf, 0, 0, w, h);
+    // large slow bokeh discs, drifting up like the panes
+    const bk = bokehSprite().el, mn = Math.min(w, h), ga = c.globalAlpha, drift = RM ? .25 : 1;
+    for (const o of BOKEH) {
+      const r = mn * o.r, span = h + r * 2.4;
+      const x = w * (o.x + Math.sin(t * o.f * drift + o.ph) * .05), y = h + r * 1.2 - ((o.y * span + t * o.v * drift) % span);
+      c.globalAlpha = ga * o.al; c.drawImage(bk, x - r, y - r, r * 2, r * 2);
+    }
+    c.globalAlpha = ga;
+  }
+
+  function barrierIcon(c, k, s) {
+    const h = s / 2;
+    c.lineWidth = clamp(s * .068, 1.4, 2.4); c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath();
+    if (k === 'silo') {
+      c.ellipse(0, -h * .62, h * .62, h * .22, 0, 0, TAU);
+      c.moveTo(-h * .62, -h * .62); c.lineTo(-h * .62, h * .62); c.ellipse(0, h * .62, h * .62, h * .22, 0, Math.PI, 0, true); c.lineTo(h * .62, -h * .62);
+      c.moveTo(-h * .62, 0); c.ellipse(0, 0, h * .62, h * .22, 0, Math.PI, 0, true);
+    } else if (k === 'legacy') {
+      rr(c, -h * .8, -h * .7, h * 1.6, h * 1.15, 4, false);
+      c.moveTo(-h * .3, h * .7); c.lineTo(h * .3, h * .7);
+      c.moveTo(0, h * .45); c.lineTo(0, h * .7);
+      c.moveTo(-h * .55, -h * .45); c.lineTo(h * .15, -h * .45);
+      c.moveTo(-h * .55, -h * .18); c.lineTo(h * .35, -h * .18);
+    } else if (k === 'hidden') {
+      c.moveTo(-h * .85, 0); c.quadraticCurveTo(0, -h * .75, h * .85, 0); c.quadraticCurveTo(0, h * .75, -h * .85, 0);
+      c.moveTo(h * .24, 0); c.arc(0, 0, h * .24, 0, TAU);
+      c.moveTo(-h * .7, -h * .7); c.lineTo(h * .7, h * .7);
+    } else {
+      const sq = (x, y, r) => { c.save(); c.translate(x, y); c.rotate(r); c.rect(-h * .2, -h * .2, h * .4, h * .4); c.restore(); };
+      sq(-h * .5, -h * .45, .3); sq(h * .45, -h * .55, -.4); sq(-h * .35, h * .5, -.2); sq(h * .5, h * .4, .5);
+    }
+    c.stroke();
+  }
+
+  // A pane of tinted frosted glass, painted once per barrier and size.
+  const PANE_PAD = 36;
+  function paneSprite(b, pw) {
+    const w = pw, h = pw * 1.28;
+    return sprite(`pane:${b.k}:${pw.toFixed(1)}`, w + PANE_PAD * 2, h + PANE_PAD * 2, c => {
+      const T = TINT[b.k], u = pw / 100, r = clamp(pw * .135, 9, 16);
+      const body = (d = 0) => rr(c, -w / 2 + d, -h / 2 + d, w - d * 2, h - d * 2, r - d);
+      const outside = () => { c.beginPath(); c.rect(-w, -h, w * 2, h * 2); rr(c, -w / 2, -h / 2, w, h, r, false); c.clip('evenodd'); };
+      let g;
+      c.translate(PANE_PAD + w / 2, PANE_PAD + h / 2);
+      // soft tinted drop shadow, kept out from under the glass so the pane stays clear
+      c.save(); outside();
+      shadowOnly(c, `rgba(${T.deep},.34)`, 20 * u, 3 * u, 13 * u, () => { body(1); c.fill(); });
+      shadowOnly(c, `rgba(${T.deep},.22)`, 5 * u, 1 * u, 3 * u, () => { body(1); c.fill(); });
+      // the thickness of the glass: a slim darker edge along the bottom and right
+      c.fillStyle = `rgba(${T.deep},.30)`; rr(c, -w / 2 + 1.4 * u, -h / 2 + 3 * u, w, h, r); c.fill();
+      c.restore();
+      // translucent body
+      g = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      g.addColorStop(0, 'rgba(255,255,255,.86)'); g.addColorStop(.5, `rgba(${T.lite},.62)`); g.addColorStop(1, `rgba(${T.rgb},.44)`);
+      c.fillStyle = g; body(); c.fill();
+      c.save(); body(); c.clip();
+      // blurred document lines behind the frost
+      shadowOnly(c, `rgba(${T.deep},.24)`, 3.2 * u, 0, 0, () => {
+        const x0 = -w / 2 + 13 * u, lw = w - 26 * u;
+        for (let i = 0, y = -h / 2 + 31 * u; y < h / 2 - 30 * u; i++, y += 12.5 * u) c.fillRect(x0, y, lw * (i % 3 === 2 ? .6 : 1), 4.6 * u);
+      });
+      // frost grain
+      const rnd = seeded(7);
+      for (let i = 0, n = 700 * u * u; i < n; i++) {
+        c.fillStyle = rnd() < .72 ? 'rgba(255,255,255,.2)' : `rgba(${T.deep},.06)`;
+        c.fillRect(-w / 2 + rnd() * w, -h / 2 + rnd() * h, .8, .8);
+      }
+      // light pooling at the top-left, shade gathering at the bottom-right
+      g = c.createRadialGradient(-w * .34, -h * .42, 0, -w * .34, -h * .42, w * .95);
+      g.addColorStop(0, 'rgba(255,255,255,.7)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = g; c.fillRect(-w / 2, -h / 2, w, h);
+      g = c.createLinearGradient(0, h / 2 - 28 * u, 0, h / 2);
+      g.addColorStop(0, `rgba(${T.deep},0)`); g.addColorStop(1, `rgba(${T.deep},.2)`);
+      c.fillStyle = g; c.fillRect(-w / 2, h / 2 - 28 * u, w, 28 * u);
+      g = c.createLinearGradient(w / 2 - 16 * u, 0, w / 2, 0);
+      g.addColorStop(0, `rgba(${T.deep},0)`); g.addColorStop(1, `rgba(${T.deep},.13)`);
+      c.fillStyle = g; c.fillRect(w / 2 - 16 * u, -h / 2, 16 * u, h);
+      // twin diagonal reflections
+      g = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      g.addColorStop(.25, 'rgba(255,255,255,0)'); g.addColorStop(.345, 'rgba(255,255,255,.6)'); g.addColorStop(.42, 'rgba(255,255,255,.1)');
+      g.addColorStop(.46, 'rgba(255,255,255,.34)'); g.addColorStop(.52, 'rgba(255,255,255,0)');
+      c.fillStyle = g; c.fillRect(-w / 2, -h / 2, w, h);
+      c.restore();
+      // rims: a defining hairline, a faint prismatic fringe, then the bright specular edge
+      c.lineWidth = 1; c.strokeStyle = `rgba(${T.deep},.46)`; body(); c.stroke();
+      c.save(); c.globalAlpha = .6; c.lineWidth = 1.4 * u; c.strokeStyle = prismRim(c, w, h); body(1.3 * u); c.stroke(); c.restore();
+      g = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.4, 'rgba(255,255,255,.35)'); g.addColorStop(.72, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,.7)');
+      c.strokeStyle = g; c.lineWidth = 1.9 * u; body(2.6 * u); c.stroke();
+      // the barrier's icon on a clean glass chip
+      const cy = -h * .04, cr = w * .255;
+      c.save(); c.shadowColor = `rgba(${T.deep},.36)`; c.shadowBlur = 9 * u * DPR; c.shadowOffsetY = 3.5 * u * DPR;
+      g = c.createLinearGradient(0, cy - cr, 0, cy + cr);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, `rgb(${T.lite})`);
+      c.fillStyle = g; c.beginPath(); c.arc(0, cy, cr, 0, TAU); c.fill(); c.restore();
+      c.lineWidth = 1; c.strokeStyle = `rgba(${T.rgb},.55)`; c.beginPath(); c.arc(0, cy, cr - .5, 0, TAU); c.stroke();
+      c.lineWidth = 1.4 * u; c.strokeStyle = '#fff'; c.lineCap = 'round'; c.beginPath(); c.arc(0, cy, cr - 2.4 * u, Math.PI * 1.08, Math.PI * 1.62); c.stroke();
+      c.strokeStyle = T.ink; c.save(); c.translate(0, cy); barrierIcon(c, b.k, w * .29); c.restore();
+      const fs = clamp(pw * .096, 7.6, 10.5);
+      c.font = `700 ${fs}px ${FONT}`; c.textBaseline = 'middle';
+      c.fillStyle = 'rgba(255,255,255,.7)'; spaced(c, b.t, 0, h / 2 - 15.5 * u + .8, fs * .1);
+      c.fillStyle = T.ink; spaced(c, b.t, 0, h / 2 - 15.5 * u, fs * .1);
+    });
+  }
+  // The document's coloured header, seen blurred through the frost.
+  function hintSprite(col, pw) {
+    const u = pw / 100, hh = 26 * u;
+    return sprite(`dochint:${col}:${pw.toFixed(1)}`, pw, hh, c => {
+      c.globalAlpha = .62;
+      shadowOnly(c, col, 2.8 * u, 0, 0, () => { rr(c, 13 * u, hh / 2 - 3.6 * u, pw - 26 * u, 7.2 * u, 3 * u); c.fill(); });
+    });
+  }
+  function drawPane(c, it, pw = PW) {
+    const u = pw / 100, h = pw * 1.28;
+    c.save(); c.translate(it.x, it.y); c.rotate(it.rot);
+    put(c, paneSprite(it.b, pw));
+    if (it.doc) put(c, hintSprite(it.doc.c, pw), 0, -h / 2 + 19 * u);
+    // a corner glint catches the light now and then
+    const tw = Math.sin((it.age || 0) * 2.1 + (it.ph || 0) * 5);
+    if (tw > .7) { const k = (tw - .7) / .3; c.globalAlpha *= k; put(c, glintSprite('255,255,255'), -pw / 2 + 10 * u, -h / 2 + 10 * u, (.35 + k * .4) * u); }
+    c.restore();
+  }
+
+  // Governance seals: embossed gold, painted once per size.
+  const GOLD = { hi: '#fff7d2', mid: '#f0c45c', lo: '#b9852b', edge: '#a2741f', f0: '#fff5c8', f1: '#f3cb66', f2: '#d19c36', ink: '#7a5212', dark: '122,82,18', shadow: 'rgba(140,92,10,.5)' };
+  const RED = { hi: '#ffd6ce', mid: '#ef6c68', lo: '#b42a38', edge: '#8f1f2a', f0: '#ffc8bc', f1: '#ea5c5d', f2: '#c53540', ink: '#6f1320', dark: '111,19,32', shadow: 'rgba(150,20,35,.5)' };
+  function sealPath(c, r) {
+    c.beginPath();
+    for (let i = 0; i <= 120; i++) { const a = i / 120 * TAU, q = r * (.955 + .045 * Math.cos(a * 18)); i ? c.lineTo(Math.cos(a) * q, Math.sin(a) * q) : c.moveTo(q, 0); }
+    c.closePath();
+  }
+  function sealSprite(sr, red) {
+    const pad = Math.ceil(sr * .5) + 4;
+    return sprite(`seal:${red ? 'r' : 'g'}:${sr.toFixed(1)}`, (sr + pad) * 2, (sr + pad) * 2, c => {
+      const P = red ? RED : GOLD, u = sr / 40;
+      let g;
+      c.translate(sr + pad, sr + pad);
+      shadowOnly(c, P.shadow, 9 * u, 1.5 * u, 6 * u, () => { sealPath(c, sr * .97); c.fill(); });
+      // scalloped rim in brushed metal
+      if (c.createConicGradient) {
+        g = c.createConicGradient(-2.36, 0, 0);
+        [P.hi, P.mid, P.lo, P.mid, P.hi, P.mid, P.lo, P.mid, P.hi].forEach((col, i) => g.addColorStop(i / 8, col));
+      } else {
+        g = c.createLinearGradient(-sr, -sr, sr, sr);
+        g.addColorStop(0, P.hi); g.addColorStop(.5, P.mid); g.addColorStop(1, P.lo);
+      }
+      c.fillStyle = g; sealPath(c, sr); c.fill();
+      c.strokeStyle = P.edge; c.lineWidth = Math.max(.8, u); c.stroke();
+      // raised face
+      g = c.createRadialGradient(-sr * .3, -sr * .4, sr * .04, 0, 0, sr * .84);
+      g.addColorStop(0, P.f0); g.addColorStop(.6, P.f1); g.addColorStop(1, P.f2);
+      c.fillStyle = g; c.beginPath(); c.arc(0, 0, sr * .8, 0, TAU); c.fill();
+      // embossing: each line gets a light twin just below-right
+      const emboss = (path, lw) => {
+        c.lineWidth = lw; c.lineJoin = 'round'; c.lineCap = 'round';
+        c.save(); c.translate(.8 * u, .9 * u); c.strokeStyle = 'rgba(255,255,255,.7)'; path(); c.stroke(); c.restore();
+        c.strokeStyle = P.ink; path(); c.stroke();
+      };
+      c.globalAlpha = .7; emboss(() => { c.beginPath(); c.arc(0, 0, sr * .8, 0, TAU); }, Math.max(.8, 1.1 * u));
+      c.globalAlpha = .5; emboss(() => { c.beginPath(); c.arc(0, 0, sr * .66, 0, TAU); }, Math.max(.6, .8 * u));
+      c.globalAlpha = 1;
+      // shield with tick
+      const k = sr * .37;
+      const shield = () => { c.beginPath(); c.moveTo(0, -k); c.lineTo(k * .85, -k * .6); c.quadraticCurveTo(k * .8, k * .55, 0, k); c.quadraticCurveTo(-k * .8, k * .55, -k * .85, -k * .6); c.closePath(); };
+      c.fillStyle = 'rgba(255,255,255,.26)'; shield(); c.fill();
+      emboss(shield, Math.max(1.3, 2 * u));
+      emboss(() => { c.beginPath(); c.moveTo(-k * .35, 0); c.lineTo(-k * .05, k * .3); c.lineTo(k * .4, -k * .3); }, Math.max(1.3, 2.1 * u));
+      // specular arc
+      c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = Math.max(.8, 1.5 * u); c.lineCap = 'round';
+      c.beginPath(); c.arc(0, 0, sr * .73, Math.PI * 1.1, Math.PI * 1.45); c.stroke();
+    });
+  }
+  // The crack a breach leaves through a seal, in units of its radius.
+  const CRACK = [[-.1, -1.3], [.16, -.66], [-.18, -.22], [.13, .26], [-.11, .72], [.08, 1.3]];
+  function drawSeal(c, it, sr = SR) {
+    if (it.state === 'live') {
+      const ga = c.globalAlpha, k = (it.age % 1.4) / 1.4;
+      c.globalAlpha = ga * (.62 + .2 * Math.sin(it.age * 3)); put(c, glow('255,200,84'), it.x, it.y, sr * 3.7 / 128); c.globalAlpha = ga;
+      c.strokeStyle = `rgba(214,160,52,${(1 - k) * .6})`; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(it.x, it.y, sr * (1 + k * .55), 0, TAU); c.stroke();
+      c.save(); c.translate(it.x, it.y); c.rotate(Math.sin(it.age * 1.6) * .15);
+      put(c, sealSprite(sr, false));
+      // slow shine sweep across the face
+      const s = ((it.age * .42 + (it.ph || 0) * .3) % 1) / .5;
+      if (s < 1) {
+        c.beginPath(); c.arc(0, 0, sr * .94, 0, TAU); c.clip();
+        c.rotate(-.5); c.translate(lerp(-sr * 1.5, sr * 1.5, s), 0);
+        c.fillStyle = grad(c, 'shine:' + sr.toFixed(1), () => {
+          const g = c.createLinearGradient(-sr * .42, 0, sr * .42, 0);
+          g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          return g;
+        });
+        c.fillRect(-sr * .42, -sr * 1.5, sr * .84, sr * 3);
+      }
+      c.restore();
+      if (it.hint) put(c, labelSprite('TAP · DON’T CUT', `700 10px ${FONT}`, '#8a5d0c', 22), it.x, it.y + sr + 19);
+    } else if (it.state === 'approved') {
+      const k = it.t / .5;
+      c.save(); c.globalAlpha *= 1 - k; put(c, sealSprite(sr, false), it.x, it.y, 1 + k * .3); c.restore();
+    } else if (it.state === 'breach') {
+      // the seal splits along its crack and the halves drop away
+      const k = it.t, s = sealSprite(sr, true), e = sr * 1.4;
+      for (const side of [-1, 1]) {
+        c.save(); c.globalAlpha *= clamp(1 - k * 1.1, 0, 1);
+        c.translate(it.x + side * k * 60, it.y + k * k * 380); c.rotate(side * k * 2);
+        c.beginPath(); c.moveTo(side * e, -e);
+        for (const [px, py] of CRACK) c.lineTo(px * sr, py * sr);
+        c.lineTo(side * e, e); c.closePath(); c.clip();
+        put(c, s); c.restore();
+      }
+    }
+  }
+  // Approval: a neat green ring, a ray burst and a check badge. a = seconds since the tap.
+  function drawApprove(c, x, y, a, sr) {
+    if (a < 0 || a >= .7) return;
+    const ga = c.globalAlpha, k = a / .7, e = BS.ease(a / .5);
+    c.save();
+    c.globalAlpha = ga * (1 - k) * .75; put(c, glow('47,191,150'), x, y, sr * (2.6 + e * 1.6) / 128);
+    c.globalAlpha = ga * (1 - k);
+    c.strokeStyle = '#16a37f'; c.lineWidth = 1 + 2.6 * (1 - e); c.beginPath(); c.arc(x, y, sr * (.8 + e * .62), 0, TAU); c.stroke();
+    c.lineCap = 'round'; c.lineWidth = 2; c.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const g = i / 10 * TAU + .31, r0 = sr * (1.02 + e * .68), r1 = r0 + sr * .2 * (1 - e * .7);
+      c.moveTo(x + Math.cos(g) * r0, y + Math.sin(g) * r0); c.lineTo(x + Math.cos(g) * r1, y + Math.sin(g) * r1);
+    }
+    c.stroke();
+    const br = sr * .5 * (RM ? 1 : back(clamp(a / .22, 0, 1)));
+    c.globalAlpha = ga * clamp((.7 - a) / .2, 0, 1);
+    c.fillStyle = '#16a37f'; c.beginPath(); c.arc(x, y, br, 0, TAU); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.5; c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.6, br * .2); c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(x - br * .42, y + br * .04); c.lineTo(x - br * .1, y + br * .34); c.lineTo(x + br * .46, y - br * .3); c.stroke();
+    c.restore();
+  }
+  // Breach: a red bloom and a white-hot crack through the seal. a = seconds since the cut.
+  function drawBreach(c, x, y, a, sr) {
+    if (a < 0 || a >= .5) return;
+    const ga = c.globalAlpha, k = a / .5;
+    c.save();
+    c.globalAlpha = ga * (1 - k) * .9; put(c, glow('229,72,77'), x, y, sr * (3.2 + k * 2.4) / 128);
+    c.strokeStyle = `rgba(229,72,77,${1 - k})`; c.lineWidth = 2 * (1 - k) + .5; c.beginPath(); c.arc(x, y, sr * (1 + k * .9), 0, TAU); c.stroke();
+    if (a < .24) {
+      c.globalAlpha = ga * (1 - a / .24); c.lineJoin = 'miter'; c.lineCap = 'round';
+      c.beginPath(); CRACK.forEach(([px, py], i) => i ? c.lineTo(x + px * sr, y + py * sr) : c.moveTo(x + px * sr, y + py * sr));
+      c.strokeStyle = '#e5484d'; c.lineWidth = 5; c.stroke();
+      c.strokeStyle = '#fff'; c.lineWidth = 2.2; c.stroke();
+    }
+    c.restore();
+  }
+  // The prismatic flash along a cut. a = seconds since the cut.
+  function drawSlash(c, x, y, ang, len, a) {
+    if (a < 0 || a >= .3) return;
+    const k = a / .3;
+    c.save(); c.translate(x, y); c.rotate(ang); c.globalAlpha *= Math.pow(1 - k, 1.4);
+    c.scale(len / 256 * (.75 + .45 * BS.ease(k)), 1 - k * .55);
+    put(c, slashSprite()); c.restore();
+  }
+  function drawFx(c, f) {
+    if (f.type === 'slash') drawSlash(c, f.x, f.y, f.ang, f.len, f.t);
+    else if (f.type === 'approve') drawApprove(c, f.x, f.y, f.t, SR);
+    else if (f.type === 'breach') drawBreach(c, f.x, f.y, f.t, SR);
+  }
+
+  // The document behind a cut pane: a crisp white card, in focus. Painted once per document and size.
+  const DOC_PAD = 24;
+  function docSprite(doc, pw) {
+    const w = pw, h = pw * 1.28;
+    return sprite(`doc:${doc.t}:${pw.toFixed(1)}`, w + DOC_PAD * 2, h + DOC_PAD * 2, c => {
+      const u = pw / 100, r = 10 * u, x0 = -w / 2 + 11 * u, iw = w - 22 * u;
+      c.translate(DOC_PAD + w / 2, DOC_PAD + h / 2);
+      shadowOnly(c, 'rgba(30,45,105,.3)', 13 * u, 0, 8 * u, () => { rr(c, -w / 2, -h / 2, w, h, r); c.fill(); });
+      shadowOnly(c, 'rgba(30,45,105,.24)', 2.5 * u, 0, 1.5 * u, () => { rr(c, -w / 2, -h / 2, w, h, r); c.fill(); });
+      c.fillStyle = '#fff'; rr(c, -w / 2, -h / 2, w, h, r); c.fill();
+      // coloured header
+      const hh = 19 * u;
+      c.save(); rr(c, -w / 2, -h / 2, w, h, r); c.clip();
+      c.fillStyle = doc.c; c.fillRect(-w / 2, -h / 2, w, hh);
+      const g = c.createLinearGradient(-w / 2, 0, w / 2, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,.3)');
+      c.fillStyle = g; c.fillRect(-w / 2, -h / 2, w, hh);
+      c.fillStyle = 'rgba(29,37,64,.1)'; c.fillRect(-w / 2, -h / 2 + hh - 1, w, 1);
+      c.fillStyle = 'rgba(255,255,255,.92)'; rr(c, x0, -h / 2 + hh / 2 - 2.2 * u, iw * .42, 4.4 * u, 2.2 * u); c.fill();
+      c.fillStyle = 'rgba(255,255,255,.7)'; c.beginPath(); c.arc(w / 2 - 14 * u, -h / 2 + hh / 2, 3 * u, 0, TAU); c.fill();
+      c.restore();
+      c.lineWidth = 1; c.strokeStyle = 'rgba(29,37,64,.12)'; rr(c, -w / 2, -h / 2, w, h, r); c.stroke();
+      // title
+      const fs = clamp(12.2 * u, 9.5, 13.5);
+      c.fillStyle = INK; c.font = `700 ${fs}px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'top';
+      let line = '', ly = -h / 2 + hh + 9 * u;
+      for (const wd of doc.t.split(' ')) {
+        const test = line ? line + ' ' + wd : wd;
+        if (c.measureText(test).width > iw && line) { c.fillText(line, x0, ly); line = wd; ly += fs * 1.22; } else line = test;
+      }
+      c.fillText(line, x0, ly);
+      // crisp body text
+      const top = ly + fs * 1.22 + 7 * u, bottom = h / 2 - 27 * u;
+      c.fillStyle = 'rgba(86,100,138,.26)';
+      for (let i = 0, y = top; y < bottom; i++, y += 9.5 * u) rr(c, x0, y, iw * (i % 4 === 3 ? .55 : i % 2 ? .92 : 1), 3.6 * u, 1.8 * u), c.fill();
+      // visible-to-AI chip
+      const ch = 14 * u, cyy = h / 2 - 9 * u - ch / 2, cfs = clamp(7.4 * u, 6.2, 8.4);
+      c.font = `700 ${cfs}px ${FONT}`;
+      const cw = Math.min(iw, c.measureText('VISIBLE TO AI').width + 19 * u);
+      c.fillStyle = 'rgba(22,163,127,.13)'; rr(c, x0, cyy - ch / 2, cw, ch, ch / 2); c.fill();
+      c.fillStyle = '#16a37f'; c.beginPath(); c.arc(x0 + 7.5 * u, cyy, 2.4 * u, 0, TAU); c.fill();
+      c.fillStyle = '#0c7f61'; c.textBaseline = 'middle'; c.fillText('VISIBLE TO AI', x0 + 13 * u, cyy + .5);
+    });
+  }
+  // The card pulses into focus, then arcs to the tray at (tx, ty).
+  function drawReveal(c, r, pw, tx, ty) {
+    const s = docSprite(r.doc, pw), ga = c.globalAlpha;
+    const dx = tx - r.x, dy = ty - r.y, side = dx > 0 || (dx === 0 && r.rot > 0) ? 1 : -1;
+    const qx = (r.x + tx) / 2 + side * dy * .24, qy = (r.y + ty) / 2 - side * dx * .24;
+    const at = k => { const m = 1 - k; return [m * m * r.x + 2 * m * k * qx + k * k * tx, m * m * r.y + 2 * m * k * qy + k * k * ty]; };
+    if (r.t < .45) {
+      const sc = 1 + Math.sin(r.t / .45 * Math.PI) * .08, f = clamp(r.t / .34, 0, 1);
+      c.save(); c.translate(r.x, r.y); c.rotate(r.rot);
+      if (f < 1) { c.globalAlpha = ga * (1 - f) * .95; put(c, glow('255,255,255'), 0, 0, pw * 2.7 / 128); c.globalAlpha = ga; }
+      c.scale(sc, sc); put(c, s);
+      // focus ring in the document's colour
+      if (f < 1) { c.globalAlpha = ga * (1 - f); c.strokeStyle = r.doc.c; c.lineWidth = 2; const d = 3 + f * 11; rr(c, -pw / 2 - d, -pw * .64 - d, pw + d * 2, pw * 1.28 + d * 2, 10 * pw / 100 + d); c.stroke(); }
+      c.restore(); c.globalAlpha = ga;
+      return;
+    }
+    const k = BS.ease((r.t - .45) / .6) ** 1.4;
+    const [x, y] = at(k), sc = lerp(1, .16, k);
+    c.save(); c.globalAlpha = ga * (1 - k * .4);
+    c.translate(x, y); c.rotate(r.rot * (1 - k) + side * k * (1 - k) * .7); c.scale(sc, sc);
+    put(c, s); c.restore();
+  }
+
+  function drawShard(c, s) {
+    const T = TINT[s.k] || TINT.silo, p = s.pts, n = p.length;
+    c.save(); c.translate(s.x, s.y); c.rotate(s.rot); c.globalAlpha *= clamp(s.life * 1.25, 0, 1) ** 1.5;
+    c.beginPath(); c.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < n; i++) c.lineTo(p[i][0], p[i][1]);
+    c.closePath();
+    c.fillStyle = grad(c, 'shard:' + s.k, () => {
+      const g = c.createLinearGradient(-30, -36, 30, 36);
+      g.addColorStop(0, 'rgba(255,255,255,.94)'); g.addColorStop(.5, `rgba(${T.lite},.76)`); g.addColorStop(1, `rgba(${T.rgb},.58)`);
+      return g;
+    });
+    c.fill();
+    // each piece flashes as it tumbles through the light
+    const gl = Math.cos(s.rot * 1.7 + s.hue);
+    if (gl > .5) { c.fillStyle = `rgba(255,255,255,${((gl - .5) * 1.7).toFixed(2)})`; c.fill(); }
+    c.lineJoin = 'round'; c.lineWidth = .8; c.strokeStyle = `rgba(${T.deep},.28)`; c.stroke();
+    // prismatic fracture edge, bright outer edge
+    c.beginPath(); c.moveTo(p[0][0], p[0][1]); c.lineTo(p[1][0], p[1][1]); c.lineWidth = 1.5; c.strokeStyle = s.col || 'rgba(124,156,255,.78)'; c.stroke();
+    c.beginPath(); c.moveTo(p[n - 2][0], p[n - 2][1]); c.lineTo(p[n - 1][0], p[n - 1][1]); c.lineWidth = 1.4; c.strokeStyle = 'rgba(255,255,255,.98)'; c.stroke();
+    c.restore();
+  }
+
+  function drawParts(c, list) {
+    const ga = c.globalAlpha;
+    for (const q of list) {
+      const k = clamp(q.life / q.max, 0, 1);
+      if (q.glint) { c.globalAlpha = ga * Math.min(1, k * 1.8); put(c, glintSprite(q.glint), q.x, q.y, q.size * (.3 + .7 * k) * (.82 + .18 * Math.sin(q.life * 46))); }
+      else { c.globalAlpha = ga * k; c.fillStyle = q.color; c.beginPath(); c.arc(q.x, q.y, q.size * (.45 + .55 * k), 0, TAU); c.fill(); }
+    }
+    c.globalAlpha = ga;
+  }
+
+  // Prism swipe trail: a tapering ribbon. pts = [{x, y, t}], now = current time on the same clock.
+  const TRAIL = ['rgba(145,102,245,0)', 'rgba(79,141,250,.8)', 'rgba(31,200,172,.92)', 'rgba(255,176,46,.96)', 'rgba(255,95,162,1)'];
+  function ribbon(c, pts, now, wMax) {
+    const n = pts.length;
+    c.beginPath();
+    for (let pass = 0; pass < 2; pass++) {
+      for (let j = 0; j < n; j++) {
+        const i = pass ? n - 1 - j : j, p = pts[i], a = pts[i ? i - 1 : 0], b = pts[i < n - 1 ? i + 1 : i];
+        const nx = a.y - b.y, ny = b.x - a.x, l = Math.hypot(nx, ny) || 1;
+        const hw = wMax * clamp(1 - (now - p.t) / .16, 0, 1) * (.3 + .7 * i / (n - 1)) * (pass ? -1 : 1);
+        const x = p.x + nx / l * hw, y = p.y + ny / l * hw;
+        (pass || j) ? c.lineTo(x, y) : c.moveTo(x, y);
+      }
+      if (!pass) {
+        const p = pts[n - 1], q = pts[n - 2], th = Math.atan2(p.y - q.y, p.x - q.x), hw = wMax * clamp(1 - (now - p.t) / .16, 0, 1);
+        if (hw > .2) c.arc(p.x, p.y, hw, th + Math.PI / 2, th - Math.PI / 2, true);
+      }
+    }
+    c.closePath();
+  }
+  function drawTrail(c, pts, now) {
+    const n = pts.length;
+    if (n < 2) return;
+    const a = pts[0], b = pts[n - 1], ga = c.globalAlpha;
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 2) return;
+    const g = c.createLinearGradient(a.x, a.y, b.x, b.y), core = c.createLinearGradient(a.x, a.y, b.x, b.y);
+    TRAIL.forEach((col, i) => g.addColorStop(i / 4, col));
+    core.addColorStop(0, 'rgba(255,255,255,0)'); core.addColorStop(.45, 'rgba(255,255,255,.85)'); core.addColorStop(1, 'rgba(255,255,255,1)');
+    c.save();
+    c.fillStyle = g;
+    c.globalAlpha = ga * .07; ribbon(c, pts, now, 23); c.fill();   // soft glow, in three steps
+    c.globalAlpha = ga * .1; ribbon(c, pts, now, 16); c.fill();
+    c.globalAlpha = ga * .2; ribbon(c, pts, now, 10.5); c.fill();
+    c.globalAlpha = ga; ribbon(c, pts, now, 6); c.fill();           // the ribbon itself
+    c.fillStyle = core; ribbon(c, pts, now, 2.2); c.fill();         // white-hot core
+    // a few glints riding the ribbon
+    for (let i = 1; i < n; i++) {
+      const p = pts[i], hsh = (p.t * 613.7 + p.x * .37) % 1;
+      if (hsh > .2) continue;
+      const k = clamp(1 - (now - p.t) / .16, 0, 1), q = pts[i - 1], l = Math.hypot(p.x - q.x, p.y - q.y) || 1, off = (hsh / .2 - .5) * 26;
+      c.globalAlpha = ga * k;
+      put(c, glintSprite(SPARK[i % 5]), p.x - (p.y - q.y) / l * off, p.y + (p.x - q.x) / l * off, .28 + k * .42);
+    }
+    // the tip
+    const kh = clamp(1 - (now - b.t) / .16, 0, 1);
+    c.globalAlpha = ga * kh; put(c, glow('255,255,255'), b.x, b.y, .26); put(c, glintSprite('255,255,255'), b.x, b.y, .4 + kh * .25);
+    c.restore();
+  }
+
+  function outlined(c, text, x, y, fill) {
+    c.strokeText(text, x, y); c.fillStyle = fill; c.fillText(text, x, y);
+  }
+  function drawPop(c, q, w) {
+    const age = q.max - q.life, ga = c.globalAlpha;
+    c.save(); c.globalAlpha = ga * clamp(q.life / q.max * 2.5, 0, 1);
+    c.lineJoin = 'round'; c.strokeStyle = 'rgba(255,255,255,.95)';
+    if (q.big) {
+      // combo: "×3 clear view", set large in a prism gradient
+      const s1 = q.size * 2.1, s2 = q.size * 1.08, f1 = `700 ${s1}px ${FONT}`, f2 = `700 ${s2}px ${FONT}`, gap = s2 * .3;
+      c.font = f1; const w1 = c.measureText(q.text).width;
+      c.font = f2; const w2 = c.measureText(q.big.tail).width;
+      const tw = w1 + gap + w2, x = clamp(q.x, tw / 2 + 16, w - tw / 2 - 16), x0 = x - tw / 2, by = q.y + s1 * .3;
+      const sc = RM ? 1 : .55 + .45 * back(clamp(age / .24, 0, 1));
+      c.translate(x, q.y); c.scale(sc, sc); c.translate(-x, -q.y);
+      c.drawImage(glow('255,255,255').el, x - tw * .8, q.y - s1 * 1.15, tw * 1.6, s1 * 2.5);
+      const g = c.createLinearGradient(x0, 0, x0 + tw, 0);
+      PRISM.forEach((col, i) => g.addColorStop(i / 4, col));
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+      c.fillStyle = 'rgba(43,58,143,.2)';
+      c.font = f1; c.fillText(q.text, x0, by + 3); c.font = f2; c.fillText(q.big.tail, x0 + w1 + gap, by + 2.5);
+      c.font = f1; c.lineWidth = s1 * .15; outlined(c, q.text, x0, by, g);
+      c.font = f2; c.lineWidth = s2 * .26; outlined(c, q.big.tail, x0 + w1 + gap, by, g);
+      c.font = `700 ${q.size * .78}px ${FONT}`; c.textAlign = 'center'; c.lineWidth = q.size * .22;
+      outlined(c, q.big.sub, x, by + q.size * 1.05, q.color);
+    } else {
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `700 ${q.size}px ${FONT}`;
+      const hw = c.measureText(q.text).width / 2 + 12, x = clamp(q.x, hw, w - hw);
+      c.lineWidth = Math.max(3, q.size * .26);
+      outlined(c, q.text, x, q.y, q.color);
+    }
+    c.restore();
+  }
+
+  // Lives: small gold seals on a glass chip, right edge at xr. bi/ba animate life bi breaking, ba seconds in.
+  function drawLives(c, xr, y, n, bi = -1, ba = 0) {
+    const cw = 86, ga = c.globalAlpha, at = i => xr - 19 - i * 24;
+    put(c, pillSprite(cw, 34), xr - cw / 2, y);
+    if (bi >= 0 && ba < .5) { c.globalAlpha = ga * (1 - ba / .5) * .42; c.fillStyle = '#e5484d'; rr(c, xr - cw, y - 17, cw, 34, 17); c.fill(); c.globalAlpha = ga; }
+    for (let i = 0; i < LIVES; i++) {
+      const x = at(i);
+      if (i < n) { put(c, sealSprite(LIFE_R, false), x, y); continue; }
+      c.fillStyle = 'rgba(29,37,64,.05)'; c.beginPath(); c.arc(x, y, 8.5, 0, TAU); c.fill();
+      c.strokeStyle = 'rgba(29,37,64,.2)'; c.lineWidth = 1.3; c.stroke();
+      c.lineJoin = 'round'; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 1.2, y - 4.6); c.lineTo(x + 1.6, y - 1.2); c.lineTo(x - 1.6, y + 1.4); c.lineTo(x + 1, y + 4.6); c.stroke();
+    }
+    if (bi >= 0 && ba < .7) {
+      // the lost life cracks in two and drops away
+      const x = at(bi), k = ba / .7, s = sealSprite(LIFE_R, true);
+      for (const side of [-1, 1]) {
+        c.save(); c.globalAlpha = ga * clamp(1 - k * k, 0, 1);
+        c.translate(x + side * ba * 24, y + ba * ba * 170); c.rotate(side * ba * 3.2);
+        c.beginPath(); c.rect(side < 0 ? -18 : 0, -18, 18, 36); c.clip();
+        put(c, s); c.restore();
+      }
+      c.strokeStyle = `rgba(229,72,77,${1 - k})`; c.lineWidth = 2.2 * (1 - k) + .4;
+      c.beginPath(); c.arc(x, y, 10 + k * 15, 0, TAU); c.stroke();
+    }
+    c.globalAlpha = ga;
+  }
+
+  // Tray: what the AI can now see. It bumps and its count ticks up as each document lands.
+  function traySprite(tw) {
+    const pill = pillSprite(tw, 34);
+    return sprite('tray:' + tw, pill.w, pill.h, c => {
+      c.drawImage(pill.el, 0, 0, pill.w, pill.h);
+      c.translate(pill.w / 2, pill.h / 2);
+      c.font = `700 12.5px ${FONT}`;
+      const lw = c.measureText('AI can see').width, total = 15 + lw + 6 + 16, x0 = -total / 2;
+      c.fillStyle = 'rgba(22,163,127,.18)'; c.beginPath(); c.arc(x0 + 4, 0, 7, 0, TAU); c.fill();
+      c.fillStyle = '#16a37f'; c.beginPath(); c.arc(x0 + 4, 0, 3.8, 0, TAU); c.fill();
+      c.fillStyle = 'rgba(29,37,64,.74)'; c.textAlign = 'left'; c.textBaseline = 'middle';
+      c.fillText('AI can see', x0 + 15, 1);
+      return { dot: x0 + 4, nx: x0 + 15 + lw + 6 };
+    });
+  }
+  function drawTray(c, x, y, n, pulse, tw = 136) {
+    const s = traySprite(tw), d = s.data, ga = c.globalAlpha, e = 1 - pulse;
+    c.save(); c.translate(x, y); c.scale(1 + pulse * .1, 1 + pulse * .1);
+    put(c, s);
+    c.fillStyle = INK; c.font = `700 14px ${FONT}`; c.textAlign = 'left'; c.textBaseline = 'middle';
+    if (pulse > 0 && n > 0) {
+      c.globalAlpha = ga * pulse;
+      c.strokeStyle = '#16a37f'; c.lineWidth = 1.6; rr(c, -tw / 2, -17, tw, 34, 17); c.stroke();
+      c.strokeStyle = 'rgba(22,163,127,.6)'; c.lineWidth = 1.4; c.beginPath(); c.arc(d.dot, 0, 5 + e * 9, 0, TAU); c.stroke();
+      c.fillText(n - 1, d.nx, 1 - e * 9);
+      c.globalAlpha = ga * e; c.fillText(n, d.nx, 1 + pulse * 9);
+    } else c.fillText(n, d.nx, 1);
+    c.restore();
+  }
+
+  // Breach feedback: a red wash and a vignette at the screen edges.
+  function drawFlash(c, w, h, f) {
+    if (f <= 0) return;
+    const k = clamp(f / .45, 0, 1), ga = c.globalAlpha;
+    c.fillStyle = `rgba(214,60,74,${k * (RM ? .03 : .09)})`; c.fillRect(0, 0, w, h);
+    c.globalAlpha = ga * Math.min(1, k * 1.7) * (RM ? .55 : 1);
+    c.drawImage(vignette().el, 0, 0, w, h);
+    c.globalAlpha = ga;
+  }
+
+  function drawHud() {
+    // prism timer along the very top; it pulses through the last ten seconds
+    ctx.fillStyle = 'rgba(29,37,64,.07)'; ctx.fillRect(0, 0, W, 5);
+    if (running || over) {
+      const left = DURATION - time, x1 = W * clamp(1 - time / DURATION, 0, 1), hot = running && left <= 10;
+      const beat = hot ? .5 + .5 * Math.sin(clock * (left <= 5 ? 13 : 8)) : 0, th = 5 + (RM ? 0 : beat * 2.5);
+      if (x1 > 0) {
+        ctx.fillStyle = timerGrad; rr(ctx, -10, -th, x1 + 10, th * 2, th); ctx.fill();
+        if (hot) { ctx.fillStyle = `rgba(255,70,110,${.25 + beat * .5})`; rr(ctx, -10, -th, x1 + 10, th * 2, th); ctx.fill(); }
+        ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(0, 0, x1 - th * .6, 1.2);
+        ctx.globalAlpha = hot ? .55 + beat * .45 : .8;
+        put(ctx, glow(hot ? '255,90,130' : '255,255,255'), x1 - 1, th / 2, hot ? .2 + beat * .12 : .14);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (!running && !over) return;
+    // the HUD bows out before the result card arrives
+    const hudA = over ? clamp(1 - (clock - overAt - .4) / .35, 0, 1) : 1;
+    if (hudA <= 0) return;
+    ctx.globalAlpha = hudA;
+    // score, on its own glass chip; it gives a small bump when it changes
+    if (score !== shownScore) { shownScore = score; scoreT = clock; }
+    const bump = RM ? 0 : Math.max(0, 1 - (clock - scoreT) / .28);
+    const tw = clamp(W - 216, 112, 136), txt = BS.fmt(score);
+    let fs = 23;
+    ctx.font = `700 ${fs}px ${FONT}`;
+    let nw = ctx.measureText(txt).width;
+    const room = W / 2 - tw / 2 - 16 - 28;
+    if (nw > room) { fs = Math.max(15, fs * room / nw); ctx.font = `700 ${fs}px ${FONT}`; nw = ctx.measureText(txt).width; }
+    const cw = Math.max(72, Math.ceil((nw + 28) / 6) * 6);
+    put(ctx, pillSprite(cw, 46, 15), 10 + cw / 2, HUD_Y);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = 'rgba(86,100,138,.9)'; ctx.font = `700 8.5px ${FONT}`; spaced(ctx, 'SCORE', 24, HUD_Y - 9, 1.3, true);
+    ctx.save(); ctx.translate(24, HUD_Y + 15); ctx.scale(1 + bump * .14, 1 + bump * .14);
+    ctx.fillStyle = INK; ctx.font = `700 ${fs}px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText(txt, 0, 0);
+    ctx.restore();
+    drawLives(ctx, W - 10, HUD_Y, lives, lifeFx ? lifeFx.i : -1, lifeFx ? lifeFx.t : 0);
+    drawTray(ctx, W / 2, HUD_Y, seen, trayPulse, tw);
+    ctx.globalAlpha = 1;
+    if (running && time < 5) {
+      ctx.save(); ctx.globalAlpha = Math.min(1, (5 - time) / 1.2);
+      put(ctx, labelSprite('Swipe the glass · tap the gold seals', `700 12.5px ${FONT}`, 'rgba(29,37,64,.82)', 32), W / 2, hintY - 14);
+      ctx.restore();
+    }
+  }
+
+  function draw() {
+    drawBg(ctx, W, H, clock);
+    ctx.save();
+    if (shake > 0 && !RM) { const m = shake * shake * 8; ctx.translate(Math.sin(clock * 73) * m, Math.cos(clock * 57) * m); }
+    for (const it of items) it.kind === 'pane' ? (it.state === 'live' && drawPane(ctx, it, PW)) : drawSeal(ctx, it, SR);
+    if (running || over) { ctx.fillStyle = fadeGrad; ctx.fillRect(-12, -12, W + 24, 116); }
+    for (const r of reveals) drawReveal(ctx, r, PW, W / 2, HUD_Y);
+    for (const s of shards) drawShard(ctx, s);
+    for (const f of fx) drawFx(ctx, f);
+    drawParts(ctx, parts);
+    drawTrail(ctx, trail, clock);
+    ctx.restore();
+    drawHud();
+    for (const q of pops) drawPop(ctx, q, W);
+    drawFlash(ctx, W, H, flash);
+  }
+  // Paint the round's sprites up front so the first cut never hitches.
+  function prewarm() {
+    for (const b of BARRIERS) paneSprite(b, PW);
+    for (const d of DOCS) { docSprite(d, PW); hintSprite(d.c, PW); }
+    for (const red of [false, true]) { sealSprite(SR, red); sealSprite(LIFE_R, red); }
+    slashSprite(); vignette(); SPARK.forEach(glintSprite);
+  }
+
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(.05, (t - last) / 1000); last = t;
+    update(dt); draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- tutorial demos: each frame is drawn from t alone, with the demo's own data ----------
+  const HAND = '#1d2540';
+  const demoCache = new Map();
+  const cached = (key, make) => { if (!demoCache.has(key)) demoCache.set(key, make()); return demoCache.get(key); };
+  const demoPane = w => clamp(w * .26, 64, 82); // 2–3 panes fit the small canvas
+  // A straight swipe from (ax, ay) to (bx, by) between times t0 and t1.
+  const swipePos = (sw, t) => { const k = clamp((t - sw.t0) / (sw.t1 - sw.t0), 0, 1); return { x: lerp(sw.ax, sw.bx, k), y: lerp(sw.ay, sw.by, k) }; };
+  const swipeTime = (sw, x) => sw.t0 + (sw.t1 - sw.t0) * clamp((x - sw.ax) / (sw.bx - sw.ax), 0, 1);
+  function swipeTrail(sw, t) {
+    const pts = [], a = Math.max(sw.t0, t - .16), b = Math.min(sw.t1, t);
+    for (let s = a; s <= b + 1e-6; s += 1 / 60) pts.push({ ...swipePos(sw, s), t: s });
+    return pts;
+  }
+  function swipeHand(c, sw, t) {
+    if (t < sw.t0 - .5 || t > sw.t1 + .45) return;
+    const p = swipePos(sw, t);
+    BS.drawHand(c, p.x, p.y, t >= sw.t0 && t <= sw.t1, HAND);
+  }
+  // Shards a seconds after the cut, using the same motion as the game.
+  function shardsAt(c, list, a) {
+    const life = 1 - a * 1.1;
+    if (a < 0 || life <= 0) return;
+    for (const s of list) drawShard(c, { pts: s.pts, hue: s.hue, k: s.k, col: s.col, life, x: s.x + s.vx * a, y: s.y + s.vy * a + 450 * a * a, rot: s.vr * a });
+  }
+  // The prismatic flash where the swipe crosses the pane.
+  function slashAt(c, it, pw, sw, a) {
+    if (a < 0 || a >= .3) return;
+    const p = cutPoint(it, pw, sw.ax, sw.ay, sw.bx, sw.by);
+    drawSlash(c, p.x, p.y, Math.atan2(sw.by - sw.ay, sw.bx - sw.ax), pw * 2.3, a);
+  }
+  function popAt(c, w, x, y, a, text, size, color, max = 1, big = null) {
+    if (a < 0 || a >= max) return;
+    drawPop(c, { x, y: y - (big ? 14 : 28) * a, text, size, color, life: max - a, max, big }, w);
+  }
+  // The burst on approval: 16 sparks, damped like the game's particles.
+  function burstAt(c, x, y, a) {
+    if (a < 0 || a >= .5) return;
+    const d = 27 * (1 - Math.pow(.9, a * 60)), list = [];
+    for (let i = 0; i < 16; i++) { const ang = i / 16 * TAU; list.push({ x: x + Math.cos(ang) * d, y: y + Math.sin(ang) * d, life: .5 - a, max: .5, size: 2.4, color: i % 2 ? '#e0b04a' : '#2fbf96' }); }
+    drawParts(c, list);
+  }
+  // Reveal card a seconds after the cut; hold keeps it on screen before it flies to the tray.
+  function revealAt(c, r, pw, a, hold, tx, ty) {
+    if (a < 0) return;
+    const rt = !hold || a < .45 ? a : a < .45 + hold ? .45 : a - hold;
+    if (rt < 1.05) drawReveal(c, { ...r, t: rt }, pw, tx, ty);
+  }
+  const fadeIn = (c, k, fn) => { c.save(); c.globalAlpha = clamp(k, 0, 1); fn(); c.restore(); };
+  const TRAY_Y = 25;
+
+  function demoCut(c, w, h, T) {
+    const t = T % 4.2, pw = demoPane(w), ph = pw * 1.28, HOLD = 1.1;
+    drawBg(c, w, h, T);
+    const base = { x: w / 2, y: h / 2 + 22, rot: -.05, b: BARRIERS[0], doc: DOCS[0], age: T };
+    const sw = { ax: base.x - pw / 2 - 46, ay: base.y - ph * .32, bx: base.x + pw / 2 + 46, by: base.y + ph * .2, t0: .8, t1: 1.35 };
+    const tc = swipeTime(sw, base.x - pw / 2 + 4), arrive = tc + 1.05 + HOLD;
+    const bob = k => ({ ...base, y: base.y + Math.sin(k * 1.8) * 3 });
+    const pane = bob(Math.min(t, tc)), n = t >= arrive ? 1 : 0;
+    if (t < tc) fadeIn(c, t / .35, () => drawPane(c, pane, pw));
+    revealAt(c, pane, pw, t - tc, HOLD, w / 2, TRAY_Y);
+    shardsAt(c, cached(`cut:${w}x${h}`, () => makeShards(bob(tc), pw, sw.ax, sw.ay, sw.bx, sw.by, seeded(11))), t - tc);
+    slashAt(c, bob(tc), pw, sw, t - tc);
+    drawTrail(c, swipeTrail(sw, t), t);
+    drawTray(c, w / 2, TRAY_Y, n, n ? Math.max(0, 1 - (t - arrive) * 3) : 0);
+    popAt(c, w, pane.x, pane.y - ph / 2 - 8, t - tc, '+10', 15, SLATE);
+    swipeHand(c, sw, t);
+  }
+
+  function demoCombo(c, w, h, T) {
+    const t = T % 4.4, pw = demoPane(w), ph = pw * 1.28;
+    drawBg(c, w, h, T);
+    const gap = clamp((w - pw * 3) / 4, 4, 12), cy = h / 2 + 26;
+    const sw = { ax: 14, ay: cy - 10, bx: w - 14, by: cy + 8, t0: .8, t1: 1.6 };
+    const panes = [0, 1, 2].map(i => ({ x: w / 2 + (i - 1) * (pw + gap), y: cy + [-6, 6, -2][i], rot: [-.06, .05, -.03][i], b: BARRIERS[i + 1], doc: DOCS[[1, 7, 0][i]], age: T, ph: i * 1.7 }));
+    const tcs = panes.map(p => swipeTime(sw, p.x - pw / 2 + 4));
+    const got = tcs.filter(tc => t >= tc + 1.05).length;
+    panes.forEach((p, i) => { if (t < tcs[i]) fadeIn(c, t / .35, () => drawPane(c, p, pw)); });
+    panes.forEach((p, i) => revealAt(c, p, pw, t - tcs[i], 0, w / 2, TRAY_Y));
+    panes.forEach((p, i) => shardsAt(c, cached(`combo${i}:${w}x${h}`, () => makeShards(p, pw, sw.ax, sw.ay, sw.bx, sw.by, seeded(21 + i))), t - tcs[i]));
+    panes.forEach((p, i) => slashAt(c, p, pw, sw, t - tcs[i]));
+    drawTrail(c, swipeTrail(sw, t), t);
+    drawTray(c, w / 2, TRAY_Y, got, got ? Math.max(0, 1 - (t - tcs[got - 1] - 1.05) * 3) : 0);
+    panes.forEach((p, i) => popAt(c, w, p.x, p.y - ph / 2 - 8, t - tcs[i], '+10', 15, SLATE));
+    popAt(c, w, w / 2, cy - 4, t - sw.t1, '×3', 20, '#2b3a8f', 1.3, { tail: 'clear view', sub: '+60' });
+    swipeHand(c, sw, t);
+  }
+
+  function demoTap(c, w, h, T) {
+    const t = T % 3.6, sr = demoPane(w) * .37, tapT = 1.3;
+    drawBg(c, w, h, T);
+    const seal = { x: w / 2, y: h / 2 - 4, age: T, t: 0, state: 'live', hint: true }, a = t - tapT;
+    if (a < 0) fadeIn(c, t / .3, () => drawSeal(c, seal, sr));
+    else if (a < .5) drawSeal(c, { ...seal, state: 'approved', t: a }, sr);
+    drawApprove(c, seal.x, seal.y, a, sr);
+    burstAt(c, seal.x, seal.y, a);
+    popAt(c, w, seal.x, seal.y - sr * 1.75 - 14, a, 'Approved +25', 16, '#0e8a68');
+    // fingertip: glide in, press, release (the tap lands on release), lift away
+    const home = { x: w / 2 + 92, y: h - 26 }, kin = BS.ease((t - .3) / .7), kout = BS.ease((t - tapT - .2) / .6);
+    const p = t < tapT + .2 ? { x: lerp(home.x, seal.x, kin), y: lerp(home.y, seal.y, kin) } : { x: lerp(seal.x, home.x, kout), y: lerp(seal.y, home.y, kout) };
+    if (t > .2 && t < tapT + 1.1) BS.drawHand(c, p.x, p.y, t >= 1.05 && t < tapT, HAND);
+  }
+
+  function demoBreach(c, w, h, T) {
+    const t = T % 3.8, sr = demoPane(w) * .37;
+    drawBg(c, w, h, T);
+    const seal = { x: w / 2, y: h / 2 + 14, age: T, t: 0, state: 'live' };
+    const sw = { ax: seal.x - 112, ay: seal.y - 50, bx: seal.x + 112, by: seal.y + 34, t0: .75, t1: 1.3 };
+    const tc = swipeTime(sw, seal.x - sr * .7), a = t - tc;
+    if (a < 0) fadeIn(c, t / .3, () => drawSeal(c, seal, sr));
+    else if (a < .9) drawSeal(c, { ...seal, state: 'breach', t: a }, sr);
+    drawBreach(c, seal.x, seal.y, a, sr);
+    drawTrail(c, swipeTrail(sw, t), t);
+    // lives, laid out as in the game's HUD; the left-most one breaks
+    drawLives(c, w - 10, TRAY_Y, a >= 0 ? LIVES - 1 : LIVES, a >= 0 ? LIVES - 1 : -1, Math.max(0, a));
+    popAt(c, w, seal.x, seal.y - sr - 14, a, 'Governance breached', 17, '#d63c4a', 1.4);
+    swipeHand(c, sw, t);
+    if (a >= 0) drawFlash(c, w, h, .45 - a);
+  }
+
+  const TUTORIAL = [
+    { title: 'Swipe to cut', text: 'Swipe through a frosted pane to shatter it. Each one is a barrier: a silo, a legacy app, hidden or scattered data.', demo: demoCut },
+    { title: 'Cut several at once', text: 'Cut through several panes in one swipe for a combo bonus.', demo: demoCombo },
+    { title: 'Tap the gold seals', text: 'Gold seals are governance: security, privacy and compliance. Tap one to approve it.', demo: demoTap },
+    { title: 'Never cut a seal', text: `Swiping through a seal is a governance breach. Three breaches and your round ends. Rounds last ${DURATION} seconds.`, demo: demoBreach },
+  ];
+
+  if (BS.params.has('debug')) window.__dbg = { items: () => items, score: () => score, lives: () => lives, step: (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); draw(); } };
+  resize();
+  window.addEventListener('resize', resize);
+  BS.init({
+    id: 'clear-cut',
+    tagline: 'Shatter the barriers between your AI and your information.',
+    onStart: start,
+    tutorial: TUTORIAL,
+  });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

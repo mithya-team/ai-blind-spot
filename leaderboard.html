@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Blind Spot Leaderboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Leaderboard: same night sky as the home page. One tab per game; each row carries that game's themed stats. */
+  :root {
+    --ink: #070a13; --fg: #eef1f8; --dim: rgba(238,241,248,.64); --faint: rgba(238,241,248,.42);
+    --line: rgba(255,255,255,.11); --glass: rgba(255,255,255,.06); --acc: #f1d48a; --acc-ink: #1a1405;
+    --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-head: Inter, -apple-system, sans-serif; --font-game: var(--font-head);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--ink); }
+  body { min-height: 100vh; color: var(--fg); font-family: var(--font-ui); background: var(--ink); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+  .sky { position: absolute; inset: 0 0 auto 0; height: 520px; overflow: hidden; pointer-events: none; }
+  .sky::before { content: ""; position: absolute; width: 620px; height: 620px; right: -250px; top: -320px; border-radius: 50%; background: radial-gradient(closest-side, transparent 55%, rgba(143,176,255,.3) 58%, rgba(143,176,255,.1) 68%, transparent 100%); }
+  .sky::after { content: ""; position: absolute; inset: 0; background: radial-gradient(520px 360px at 18% 0%, var(--wash, rgba(54,78,160,.42)), transparent 70%), linear-gradient(180deg, transparent 60%, var(--ink)); transition: background .4s; }
+  .wrap { position: relative; max-width: 560px; margin: 0 auto; padding: max(22px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 44px max(16px, env(safe-area-inset-left)); }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .bs-logos { display: inline-flex; gap: 7px; vertical-align: middle; }
+  .bs-lg { width: 32px; height: 32px; border-radius: 23%; overflow: hidden; display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 6px 14px -6px rgba(0,0,0,.7); }
+  .bs-ot img { display: block; width: 108%; height: 108%; margin: -4%; }
+  .back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--fg); text-decoration: none; padding: 9px 13px 9px 10px; border-radius: 99px; background: var(--glass); border: 1px solid var(--line); }
+  .back svg { width: 14px; height: 14px; }
+  h1 { font-family: var(--font-head); font-weight: 700; font-size: clamp(38px, 11.5vw, 50px); letter-spacing: -.04em; line-height: 1; margin: 30px 0 18px; }
+  h1 small { display: block; font-size: .3em; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #8fb0ff; margin: 0 0 10px 2px; }
+
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 18px; background: var(--glass); border: 1px solid var(--line); margin-bottom: 18px; }
+  .tabs a { display: grid; place-items: center; text-align: center; padding: 9px 3px; min-height: 46px; border-radius: 14px; color: var(--dim); text-decoration: none; font-size: 12.5px; font-weight: 600; line-height: 1.15; transition: background .2s, color .2s; }
+  .tabs a.on { background: var(--acc); color: var(--acc-ink); box-shadow: 0 10px 22px -12px var(--acc); }
+
+  .head { display: flex; justify-content: flex-end; margin: -6px 4px 8px; min-height: 14px; }
+  .head h2 { font-family: var(--font-game); font-weight: var(--game-weight, 800); font-size: 30px; line-height: 1; letter-spacing: var(--game-track, -.03em); color: var(--acc); }
+  .head p { font-size: 13px; line-height: 1.4; color: var(--dim); margin-top: 6px; max-width: 34ch; text-wrap: pretty; }
+  .head .cnt { flex: none; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); padding-bottom: 2px; }
+
+  ol { list-style: none; display: grid; gap: 7px; }
+  li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center; padding: 13px 16px 13px 12px; border-radius: 18px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
+  .in li { animation: rise .55s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i) * 45ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+  .pos { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; color: var(--dim); background: rgba(255,255,255,.05); }
+  li.p1 { padding-top: 16px; padding-bottom: 16px; background: linear-gradient(120deg, rgba(255,255,255,.13), rgba(255,255,255,.05)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
+  li.p1 .pos { background: linear-gradient(150deg, #fff3c9, #e2b64d 55%, #b88422); color: #2a1c02; box-shadow: 0 0 0 3px rgba(226,182,77,.2); }
+  li.p2 .pos { background: linear-gradient(150deg, #fff, #c3cbd9 55%, #8b95a8); color: #1a2030; }
+  li.p3 .pos { background: linear-gradient(150deg, #ffd9b8, #cf8a52 55%, #96592a); color: #2a1503; }
+  li.me { box-shadow: inset 0 0 0 1.5px var(--acc); }
+  .nm { min-width: 0; }
+  .nm b { display: flex; align-items: center; gap: 7px; font-size: 16px; font-weight: 600; }
+  .nm b span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nm small { display: block; font-size: 12.5px; color: var(--dim); margin-top: 1px; }
+  .tagc { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.12); color: var(--dim); }
+  .tagc.you { background: var(--acc); color: var(--acc-ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .chips span i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .chips span.none { opacity: .45; }
+  .chips span { font-size: 11.5px; line-height: 1; padding: 5px 8px; border-radius: 8px; background: rgba(255,255,255,.07); color: var(--dim); white-space: nowrap; }
+  /* Overall tab: one small tile per game */
+  li.ov .pos { grid-row: 1 / 3; }
+  .chips.parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-column: 2 / -1; margin-top: 0; }
+  .chips.parts span { padding: 6px 6px 7px 7px; font-size: 10px; font-weight: 600; letter-spacing: .01em; color: var(--c); overflow: hidden; text-overflow: ellipsis; }
+  .chips.parts span i { display: none; }
+  .chips.parts b { display: block; margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+  .sc { font-family: var(--font-head); font-size: 22px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; text-align: right; }
+  li.p1 .sc { font-size: 27px; color: var(--acc); }
+  .empty { padding: 34px 20px; text-align: center; border-radius: 20px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); color: var(--dim); font-size: 14.5px; line-height: 1.5; }
+  .empty a { display: inline-block; margin-top: 14px; padding: 12px 18px; border-radius: 12px; background: var(--acc); color: var(--acc-ink); font-weight: 700; text-decoration: none; }
+  .note { font-size: 12px; color: var(--faint); text-align: center; margin-top: 20px; line-height: 1.6; }
+
+  /* Room display: add ?screen to the address */
+  .screen .wrap { max-width: 1280px; padding-top: 32px; }
+  .screen h1 { font-size: 54px; margin: 22px 0 18px; }
+  .screen .bs-lg { width: 46px; height: 46px; }
+  .screen .tabs a { font-size: 20px; padding: 13px; }
+  .screen .head h2 { font-size: 46px; } .screen .head p { font-size: 20px; max-width: 70ch; } .screen .head .cnt { font-size: 15px; }
+  .screen ol { gap: 9px; }
+  .screen li { padding: 14px 28px 14px 18px; grid-template-columns: 54px 1fr auto; gap: 20px; border-radius: 22px; }
+  .screen li.p1 { padding-top: 16px; padding-bottom: 16px; }
+  .screen .pos { width: 54px; height: 54px; font-size: 23px; }
+  .screen .nm { display: grid; grid-template-columns: minmax(260px, 1fr) auto; align-items: center; column-gap: 24px; }
+  .screen .nm b { font-size: 27px; grid-column: 1; } .screen .nm small { font-size: 18px; grid-column: 1; }
+  .screen .chips { grid-column: 2; grid-row: 1 / 3; margin-top: 0; justify-content: flex-end; gap: 6px; }
+  .screen .chips span { font-size: 17px; padding: 8px 13px; border-radius: 10px; }
+  .screen li.ov { grid-template-columns: 54px 1fr auto auto; }
+  .screen li.ov .pos { grid-row: auto; }
+  .screen .chips.parts { grid-template-columns: repeat(3, auto); grid-column: 3; grid-row: 1; }
+  .screen li.ov .sc { grid-column: 4; grid-row: 1; }
+  .screen .chips.parts span { font-size: 15px; padding: 8px 14px 9px; font-weight: 500; color: var(--dim); }
+  .screen .chips.parts span i { display: inline-block; }
+  .screen .chips.parts b { font-size: 24px; margin-top: 3px; }
+  .screen .sc { font-size: 38px; min-width: 150px; } .screen li.p1 .sc { font-size: 46px; }
+  .screen .back, .screen .note { display: none; }
+  /* Wide screens (not the room display): stats sit beside the name, so more rows fit. */
+  @media (min-width: 900px) {
+    html:not(.screen) .wrap { max-width: 1060px; padding-top: 30px; }
+    html:not(.screen) h1 { font-size: 66px; margin: 40px 0 22px; }
+    html:not(.screen) .tabs a { font-size: 15px; min-height: 50px; }
+    html:not(.screen) .head h2 { font-size: 38px; } html:not(.screen) .head p { font-size: 15px; max-width: 70ch; }
+    html:not(.screen) li { grid-template-columns: 40px 1fr auto; gap: 16px; padding: 12px 24px 12px 14px; }
+    html:not(.screen) .pos { width: 40px; height: 40px; font-size: 16px; }
+    html:not(.screen) .nm { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; column-gap: 20px; }
+    html:not(.screen) .nm b { grid-column: 1; font-size: 18px; } html:not(.screen) .nm small { grid-column: 1; font-size: 13.5px; }
+    html:not(.screen) .chips { grid-column: 2; grid-row: 1 / 3; margin-top: 0; justify-content: flex-end; gap: 5px; }
+    html:not(.screen) .chips span { font-size: 12.5px; padding: 7px 10px; }
+    html:not(.screen) li.ov { grid-template-columns: 40px 1fr auto auto; }
+    html:not(.screen) li.ov .pos { grid-row: auto; }
+    html:not(.screen) .chips.parts { grid-template-columns: repeat(3, auto); grid-column: 3; grid-row: 1; }
+    html:not(.screen) .chips.parts span { font-size: 11.5px; font-weight: 500; color: var(--dim); padding: 7px 12px 8px; }
+    html:not(.screen) .chips.parts span i { display: inline-block; }
+    html:not(.screen) .chips.parts b { font-size: 17px; }
+    html:not(.screen) li.ov .sc { grid-column: 4; grid-row: 1; }
+    html:not(.screen) .sc { font-size: 26px; min-width: 110px; } html:not(.screen) li.p1 .sc { font-size: 31px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .in li { animation: none; } }
+</style>
+</head>
+<body>
+<div class="sky" aria-hidden="true"></div>
+<div class="wrap">
+  <div class="top"><span id="logos"></span><a class="back" href="games.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>All games</a></div>
+  <h1><small>The AI Blind Spot</small>Leaderboard</h1>
+  <nav class="tabs" id="tabs"></nav>
+  <div class="head"><span class="cnt" id="cnt"></span></div>
+  <ol id="rows"></ol>
+  <p class="note"><span id="how"></span>Each player's best attempt in a game counts. A practice score counts only until they play an attempt.<br>Prototype: this shows scores saved on this device.</p>
+</div>
+<script src="shared/common.js?v=13"></script>
+<script>
+  const LOOK = {
+    'golden-thread': { acc: '#f1d48a', ink: '#1a1405', wash: 'rgba(64,84,170,.5)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Thread' },
+    'deep-dive': { acc: '#9eeaff', ink: '#04202c', wash: 'rgba(28,110,150,.5)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Deep Dive' },
+    'clear-cut': { acc: '#d9ccff', ink: '#1d1640', wash: 'rgba(120,96,200,.42)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Clear Cut' },
+    overall: { acc: '#a9c1ff', ink: '#081238', wash: 'rgba(54,78,160,.42)', font: 'Inter, sans-serif', weight: 700, track: '-.03em' },
+  };
+  const OVERALL = { title: 'Overall', blurb: 'Each game is worth up to 1,000 points. The top score in a game sets 1,000, and every other score is scaled against it.' };
+  const games = Object.keys(BS.GAMES), ids = ['overall', ...games], screen = BS.params.has('screen');
+  const rowsEl = document.getElementById('rows');
+  const wide = () => screen || matchMedia('(min-width: 900px)').matches;
+  document.getElementById('logos').innerHTML = BS.LOGOS;
+  if (screen) document.documentElement.classList.add('screen');
+  const cur = () => ids.includes(location.hash.slice(1)) ? location.hash.slice(1) : ids[0];
+  function render(animate) {
+    const id = cur(), all_ = id === 'overall', g = all_ ? OVERALL : BS.GAMES[id], L = LOOK[id], p = BS.player(), me = (p.name + '|' + p.company).toLowerCase();
+    const st = document.documentElement.style;
+    st.setProperty('--acc', L.acc); st.setProperty('--acc-ink', L.ink); st.setProperty('--wash', L.wash);
+    st.setProperty('--font-game', L.font); st.setProperty('--game-weight', L.weight); st.setProperty('--game-track', L.track);
+    document.getElementById('tabs').innerHTML = ids.map(k => `<a href="#${k}" class="${k === id ? 'on' : ''}">${k === 'overall' ? 'Overall' : BS.GAMES[k].title}</a>`).join('');
+    document.getElementById('how').innerHTML = all_ ? 'Overall: each game is worth up to 1,000 points, scaled against that game\'s top score.<br>' : '';
+    const all = all_ ? BS.overall() : BS.board(id), rows = all.slice(0, screen ? 8 : 50);
+    const chips = r => all_
+      ? games.map(k => { const part = r.parts[k]; return `<span class="${part ? '' : 'none'}" style="--c:${LOOK[k].acc}"><i style="background:${LOOK[k].acc}"></i>${wide() ? BS.GAMES[k].title : LOOK[k].short}<b>${part ? BS.fmt(part.pts) : '–'}</b></span>`; }).join('')
+      : g.line(r.stats || {}).split(' · ').map(c => `<span>${BS.esc(c)}</span>`).join('');
+    document.getElementById('cnt').textContent = all.length ? BS.pl(all.length, 'player') : '';
+    rowsEl.classList.toggle('in', !!animate);
+    rowsEl.innerHTML = rows.length ? rows.map((r, i) => `<li class="${r.key === me ? 'me' : ''} ${i < 3 ? 'p' + (i + 1) : ''}${all_ ? ' ov' : ''}" style="--i:${i}">
+        <span class="pos">${i + 1}</span>
+        <span class="nm"><b><span>${BS.esc(r.name)}</span>${r.key === me ? '<i class="tagc you" style="font-style:normal">You</i>' : ''}${!all_ && r.source === 'practice' ? '<i class="tagc" style="font-style:normal">Practice</i>' : ''}${all_ && r.played < games.length ? `<i class="tagc" style="font-style:normal">${r.played} of ${games.length} played</i>` : ''}</b><small>${BS.esc(r.company)}</small>
+          ${all_ ? '' : `<span class="chips">${chips(r)}</span>`}</span>
+        <span class="sc">${BS.fmt(r.score)}</span>${all_ ? `<span class="chips parts">${chips(r)}</span>` : ''}</li>`).join('')
+      : `<div class="empty">No scores yet${all_ ? '' : ' for ' + g.title}.<br><a href="${all_ ? 'games.html' : g.href}">Be the first to play</a></div>`;
+  }
+  window.addEventListener('hashchange', () => render(true));
+  let wasWide = wide();
+  window.addEventListener('resize', () => { if (wide() !== wasWide) { wasWide = wide(); render(false); } });
+  render(true);
+  if (screen) { // room display: rotate through the games and pick up new scores
+    setInterval(() => { location.hash = ids[(ids.indexOf(cur()) + 1) % ids.length]; }, 12000);
+    setInterval(() => render(false), 4000);
+  }
+</script>
+</body>
+</html>
