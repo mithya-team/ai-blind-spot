@@ -43,7 +43,7 @@ python3 -m http.server 8123
 
 Open http://localhost:8123. To try it on a phone on the same Wi-Fi, open `http://<your-computer's-LAN-IP>:8123`. Some office networks block device-to-device traffic, so if that fails, push to a branch and use the live site.
 
-Opening the HTML files straight from disk (`file://`) is not supported: the desktop stage uses an iframe and same-origin access.
+Serve the folder over HTTP rather than opening the files from disk (`file://`), so saved progress and fonts behave as they will when hosted.
 
 ---
 
@@ -55,7 +55,6 @@ games.html          The three games, your progress in each, your overall standin
 golden-thread.html  Game 1
 deep-dive.html      Game 2
 clear-cut.html      Game 3
-play.html           Desktop "stage": runs a game inside a phone-shaped frame (see below)
 leaderboard.html    Overall + one tab per game; ?screen = room display
 shared/common.js    Everything shared: players, rounds, scores, leaderboards, cards, tutorial, sound, logos
 shared/common.css   Styles for the shared cards (intro, tutorial, results)
@@ -82,7 +81,7 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
    4. **Results card:** score, a one-line takeaway built from the round's stats, four stat tiles, round progress, the next button and the top 5.
 4. **`leaderboard.html`**: Overall plus one tab per game, with each row showing the game's themed stats.
 
-**Wide screens.** If a game page is opened in a window at least 700 × 560 px, the shell redirects to `play.html?g=<game-id>`. That page shows the game inside a phone-shaped iframe, with context on the left (rules, controls, your rounds) and the live per-game leaderboard on the right. This keeps the playfield the same size as on a phone, so desktop and phone scores are comparable. Inside the frame the game page gets `?framed=1`, sets `<base target="_parent">`, and posts `{bs: true, type: 'ready' | 'score'}` messages to the parent. If the frame doesn't report ready within 6 s, `play.html` falls back to the plain full-window game.
+**Wide screens.** Every game runs full-window on any screen size: the canvas fills the browser and the game adapts to it. The intro, tutorial and results cards switch to a two-column layout when the window is at least 980 × 620 px (rules beside the title, the demo beside the explanation, the leaderboard beside the score). Each card's contents are grouped in `.ga` / `.gb` wrappers, which are `display: contents` on phones so the single-column order is unchanged. A desktop playfield is larger than a phone's, so desktop and phone scores aren't strictly comparable; at the event most people play on phones.
 
 ---
 
@@ -168,13 +167,13 @@ All of it runs synchronously against a local store through two private functions
 Every page links `shared/common.js?v=N` and `shared/common.css?v=N`. **When you change anything in `shared/`, bump `N` in every HTML file**, or phones keep the old copy:
 
 ```bash
-sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=14"#g' *.html   # macOS sed; drop '' on Linux
+sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=15"#g' *.html   # current is v=14; macOS sed, drop '' on Linux
 ```
 
 ### Adding or changing a game
 1. Add an entry to `GAMES` in `common.js`: title, href, blurb, meaning rows, stats and line.
 2. Create the page with `BS.init(...)` and call `BS.finish(...)` with the stats keys you declared.
-3. Add a card to `games.html`, a tab look to `leaderboard.html` (`LOOK`), and an entry to `play.html` (`LOOK`).
+3. Add a card to `games.html`, and a tab look to `leaderboard.html` (`LOOK`).
 
 ---
 
@@ -276,7 +275,7 @@ Tighten the score bounds per game once you've seen real scores, or move score va
 - **`setPlayer()`**: upsert into `players` (and update `last_seen`), then update the cache.
 - **`record()`**: insert into `rounds`, then update the cache. If the insert is rejected (for example a fourth attempt), keep the server's answer.
 - **`players()`, `board()`, `overall()`**: unchanged; they read the cache.
-- **`leaderboard.html?screen`**: subscribe to realtime inserts on `rounds`, or keep its existing 4-second refresh but re-fetch. `games.html` and `play.html` should re-fetch on focus.
+- **`leaderboard.html?screen`**: subscribe to realtime inserts on `rounds`, or keep its existing 4-second refresh but re-fetch. `games.html` should re-fetch on focus.
 - **Offline:** if a write fails, queue it in `localStorage` and retry, so a dropped connection doesn't lose a round.
 
 The Supabase JS client loads from a CDN with a plain `<script>` tag, so the no-build setup can stay. The anon key is designed to be public; row-level security is what protects the data.
@@ -314,7 +313,6 @@ The Supabase JS client loads from a CDN with a plain `<script>` tag, so the no-b
 | `?t=20` | Golden Thread, Clear Cut | Round length in seconds |
 | `?from=3000` | Deep Dive | Start depth in metres (0 to 6,100) |
 | `?tut` | game pages | Opens the tutorial directly |
-| `?nostage` | game pages | Skips the desktop phone frame |
 | `?screen` | leaderboard | Room-display layout, rotates through the tabs every 12 s |
 | `#deep-dive` etc. | leaderboard | Opens that tab |
 
@@ -415,5 +413,5 @@ These were settled with the client. Please don't undo them without checking.
 - **Explainers:** each game explains how its mechanics map to the roundtable's theme, and the results and leaderboard show themed stats.
 - **Typography and colour:** Inter everywhere; games differ by colour only. The Clear Cut card is dark on the games list so it doesn't outshine the other two.
 - **Sound:** off by default.
-- **Desktop:** games run in a phone-shaped frame on desktop so everyone plays the same playfield.
+- **Desktop:** games run full screen on desktop, with no phone-shaped frame. The intro, tutorial and results cards use a two-column layout on wide windows. (A phone frame was tried and dropped.)
 - **Leaderboard:** an Overall tab across all three games is required. No big title or description under the tabs.

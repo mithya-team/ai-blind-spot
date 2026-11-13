@@ -14,14 +14,7 @@
   const fmt = n => Math.round(n).toLocaleString('en-US');
   const pl = (n, one, many) => `${fmt(n)} ${n === 1 ? one : (many || one + 's')}`;
   const params = new URLSearchParams(location.search);
-  /* On wide screens a game runs inside play.html, in a phone-shaped frame, so it plays the same as on a phone.
-     framed = this page is inside that frame. */
-  const framed = params.has('framed');
-  const wantsStage = () => !framed && window.innerWidth >= 700 && window.innerHeight >= 560
-    && !['auto', 'tut', 'debug', 'nostage'].some(k => params.has(k));
-  const toStage = id => { const q = new URLSearchParams(location.search); q.set('g', id); location.replace('play.html?' + q); };
-  const nav = (url, replace) => { const w = framed ? window.parent : window; if (replace) w.location.replace(url); else w.location.href = url; };
-  const tell = msg => { if (framed) try { window.parent.postMessage(Object.assign({ bs: true }, msg), '*'); } catch (e) {} };
+  const nav = (url, replace) => { if (replace) location.replace(url); else location.href = url; };
   const MAX_RUNS = 3;
 
   /* ---------- Co-brand marks (launcher-style squircles) ---------- */
@@ -95,11 +88,6 @@
       line: s => `${pl(s.cleared || 0, 'barrier')} cleared · ${fmt(s.approved || 0)} approved · ${pl(s.breaches || 0, 'breach', 'breaches')}`,
     },
   };
-
-  { // If this is a game page opened on a wide screen, move to the stage before the game starts.
-    const page = (location.pathname.split('/').pop() || '').replace(/\.html$/, '');
-    if (GAMES[page] && wantsStage()) toStage(page);
-  }
 
   /* ---------- Device-local data ---------- */
   const DB_KEY = 'bs_db_v2';
@@ -328,37 +316,31 @@
       const meta = GAMES[cfg.id];
       if (params.has('auto') && !this.hasPlayer()) this.setPlayer('Tester', 'Test Co');
       if (!this.hasPlayer()) { nav('index.html?next=' + encodeURIComponent(meta.href), true); return; }
-      if (wantsStage()) { toStage(cfg.id); return; }
-      if (framed) {
-        const b = document.createElement('base'); b.target = '_parent'; document.head.append(b);
-        document.documentElement.classList.add('framed');
-        tell({ type: 'ready', id: cfg.id });
-      }
       this.seen = store.get('bs_tut_' + cfg.id, false);
 
       const mk = (cls, html) => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; document.body.append(d); return d; };
       const p = this.player();
-      this.ovIntro = mk('ov', `<div class="card">
+      this.ovIntro = mk('ov', `<div class="card wide intro"><div class="ga">
         ${LOGOS}
         <div class="kicker">The AI Blind Spot</div>
         <h1>${meta.title}</h1>
-        <p class="tag">${cfg.tagline}</p>
+        <p class="tag">${cfg.tagline}</p></div>
         <div class="meaning">${meta.meaning.map(([t, d]) => `<div><b>${t}</b><span>${d}</span></div>`).join('')}</div>
-        <div id="bs-ipips"></div>
+        <div class="gb"><div id="bs-ipips"></div>
         <div class="srow"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path id="bs-sndw" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><b id="bs-sndl" style="font-weight:500"></b></span><button class="toggle" id="bs-snd" type="button" role="switch" aria-label="Sound"></button></div>
         <button class="btn" id="bs-go" type="button"></button>
         <div class="links"><button class="link" id="bs-how" type="button">How to play</button><a class="link" href="leaderboard.html">Leaderboard</a><a class="link" href="games.html">All games</a></div>
-        <p class="who">Playing as ${esc(p.name)} · ${esc(p.company)}</p>
+        <p class="who">Playing as ${esc(p.name)} · ${esc(p.company)}</p></div>
       </div>`);
-      this.ovTut = mk('ov tut', `<div class="card">
+      this.ovTut = mk('ov tut', `<div class="card wide">
         <div class="tuthead"><span id="bs-tstep"></span><button class="link" id="bs-tskip" type="button">Skip</button></div>
         <div class="demo"><canvas id="bs-tcv"></canvas></div>
-        <h2 id="bs-ttitle"></h2>
+        <div class="gb"><h2 id="bs-ttitle"></h2>
         <p class="ttext" id="bs-ttext"></p>
         <div class="dots" id="bs-tdots"></div>
-        <div class="tbtns"><button class="btn ghost" id="bs-tback" type="button">Back</button><button class="btn" id="bs-tnext" type="button">Next</button></div>
+        <div class="tbtns"><button class="btn ghost" id="bs-tback" type="button">Back</button><button class="btn" id="bs-tnext" type="button">Next</button></div></div>
       </div>`);
-      this.ovEnd = mk('ov', `<div class="card">
+      this.ovEnd = mk('ov', `<div class="card wide end"><div class="ga">
         <div class="kicker" id="bs-emode"></div>
         <div class="headline" id="bs-head"></div>
         <div class="big" id="bs-score"></div>
@@ -366,10 +348,10 @@
         <p class="theme" id="bs-theme"></p>
         <div class="statgrid" id="bs-stats"></div>
         <div id="bs-epips"></div>
-        <button class="btn" id="bs-next" type="button"></button>
-        <div class="lbtitle"><span>Leaderboard</span><span id="bs-rank"></span></div>
+        <button class="btn" id="bs-next" type="button"></button></div>
+        <div class="gb"><div class="lbtitle"><span>Leaderboard</span><span id="bs-rank"></span></div>
         <ol class="lb" id="bs-lb"></ol>
-        <div class="links"><a class="link" href="leaderboard.html">Full leaderboard</a><a class="link" href="games.html">All games</a></div>
+        <div class="links"><a class="link" href="leaderboard.html">Full leaderboard</a><a class="link" href="games.html">All games</a></div></div>
       </div>`);
       this.pill = mk('bs-mode', '');
 
@@ -466,7 +448,6 @@
       const id = this.cfg.id, meta = GAMES[id], mode = this.mode || 'practice';
       const modeText = this.modeLabel(id, mode);
       const res = this.record(id, mode, r.score, r.stats || {});
-      tell({ type: 'score', id });
       this.pill.classList.remove('show');
       this.sfx(r.win || (res.run.score > 0 && (res.prevBest == null || res.run.score > res.prevBest)) ? 'win' : 'end');
       const $ = s => this.ovEnd.querySelector(s);

@@ -46,6 +46,16 @@ canvas { display: block; position: fixed; inset: 0; touch-action: none; }
 .ov.show .card > :nth-child(8) { animation-delay: .37s; }
 .ov.show .card > :nth-child(9) { animation-delay: .42s; }
 .ov.show .card > :nth-child(n+10) { animation-delay: .47s; }
+/* Wide cards group their contents; on phones the groups vanish and the children rise one by one. */
+.ga, .gb { display: contents; }
+.ov.show .card > .ga > *, .ov.show .card > .gb > * { animation: bs-rise .55s cubic-bezier(.2,.8,.2,1) backwards .06s; }
+.ov.show .card > .ga > :nth-child(2) { animation-delay: .1s; }
+.ov.show .card > .ga > :nth-child(3) { animation-delay: .14s; }
+.ov.show .card > .ga > :nth-child(n+4) { animation-delay: .18s; }
+.ov.show .card > .gb > * { animation-delay: .26s; }
+.ov.show .card > .gb > :nth-child(2) { animation-delay: .3s; }
+.ov.show .card > .gb > :nth-child(3) { animation-delay: .34s; }
+.ov.show .card > .gb > :nth-child(n+4) { animation-delay: .38s; }
 
 /* ---- Type ---- */
 .kicker { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); margin-top: 12px; font-weight: 600; }
@@ -142,7 +152,7 @@ input:focus { border-color: var(--accent); }
   font-family: var(--font-display); font-weight: var(--display-weight, 600); font-size: 78px; line-height: 1; margin-top: 6px;
   font-variant-numeric: lining-nums tabular-nums; letter-spacing: var(--display-tracking, 0);
 }
-.ov.show .card > .big { animation: bs-pop .7s cubic-bezier(.2,1.5,.3,1) backwards .2s; }
+.ov.show .card .big { animation: bs-pop .7s cubic-bezier(.2,1.5,.3,1) backwards .2s; }
 .label.best {
   display: inline-block; opacity: 1; padding: 5px 12px; border-radius: 99px; font-size: 12.5px; font-weight: 600;
   background: none; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent);
@@ -179,8 +189,40 @@ input:focus { border-color: var(--accent); }
   .big { font-size: 64px; }
   .demo { height: 200px; }
 }
+/* Desktop: the same cards, laid out across the full screen in two columns. */
+@media (min-width: 980px) and (min-height: 620px) {
+  .ov { padding: 32px; }
+  .card.wide {
+    max-width: 980px; padding: 44px 48px 34px; border-radius: 30px;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); column-gap: 52px; align-items: center;
+  }
+  .card.wide > .ga, .card.wide > .gb { display: block; }
+
+  .intro { grid-template-areas: "a m" "b m"; }
+  .intro > .ga { grid-area: a; align-self: end; }
+  .intro > .gb { grid-area: b; align-self: start; padding-top: 20px; }
+  .intro h1 { font-size: 60px; margin: 10px 0 12px; }
+  .intro .tag { font-size: 17px; }
+  .intro .meaning { grid-area: m; margin: 0; padding: 8px 24px; border-radius: 22px; }
+  .intro .meaning div { grid-template-columns: 116px 1fr; gap: 14px; padding: 17px 0; font-size: 15px; line-height: 1.45; }
+
+  .tut .card.wide { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); grid-template-areas: "d h" "d b"; grid-template-rows: auto 1fr; align-items: start; }
+  .tut .tuthead { grid-area: h; margin: 0; }
+  .tut .demo { grid-area: d; height: min(460px, calc(100vh - 160px)); border-radius: 22px; }
+  .tut .gb { grid-area: b; align-self: center; }
+  .tut h2 { font-size: 36px; margin-top: 0; }
+  .ttext { font-size: 17px; min-height: 100px; }
+
+  .end { grid-template-areas: "a b"; align-items: center; }
+  .end > .ga { grid-area: a; }
+  .end > .gb { grid-area: b; }
+  .end .headline { font-size: 28px; }
+  .end .big { font-size: 96px; }
+  .end .lbtitle { margin-top: 0; }
+  .end .lb li { padding: 11px 14px; font-size: 15px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .card, .ov, .dots i, .toggle::after { transition: none; }
-  .ov.show .card > *, .ov.show .card > .big, .btn::after, .pip.cur i::after { animation: none !important; }
+  .ov.show .card > *, .ov.show .card .big, .ov.show .card > .ga > *, .ov.show .card > .gb > *, .btn::after, .pip.cur i::after { animation: none !important; }
   .pip.cur i::after { opacity: .6; }
 }
