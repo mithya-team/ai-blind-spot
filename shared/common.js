@@ -39,10 +39,10 @@
   const GAMES = {
     'golden-thread': {
       title: 'Golden Thread', href: 'golden-thread.html',
-      blurb: 'Connect scattered content into one answer. Keep clear of the blind spots.',
+      blurb: 'Connect scattered, unstructured content into one answer. Keep clear of the blind spots.',
       meaning: [
-        ['Fragments', 'Contracts, emails, invoices, tickets and customer records, scattered across your systems.'],
-        ['The thread', 'Connecting them gives your AI context. A longer thread means a better answer.'],
+        ['Fragments', 'Unstructured content: contracts, emails, invoices, tickets and customer records, scattered across your systems.'],
+        ['The thread', 'Connected data. Linking fragments gives your AI context, and a longer thread means a better answer.'],
         ['Blind spots', 'Information your AI can’t reach. Touch one and the connection breaks.'],
         ['Full picture', 'All five kinds in one thread: the complete view of a customer. Double points.'],
       ],
@@ -56,12 +56,12 @@
     },
     'deep-dive': {
       title: 'Deep Dive', href: 'deep-dive.html',
-      blurb: 'Most of what your company knows sits below the surface. How deep can your AI see?',
+      blurb: 'Most of what your company knows sits below the surface. Context is your AI\u2019s oxygen: how deep can it go?',
       meaning: [
-        ['The dive', 'Down through the layers of your business: cloud apps, shared drives, email archives and legacy systems.'],
-        ['Your light', 'How far your AI can see. It fades unless it reaches more information.'],
-        ['Documents', 'Each one you collect is knowledge your AI can now use. It refills your light.'],
-        ['Walls', 'Legacy systems that block access. Hitting one drains your light.'],
+        ['The dive', 'Down through the layers of your business: cloud apps, shared drives, email archives, legacy apps and systems of record.'],
+        ['Context', 'Your AI\u2019s oxygen, shown as its glow. It runs down unless it reaches more content.'],
+        ['Documents', 'Each one you collect is content your AI can now use. It tops up your context.'],
+        ['Walls', 'Legacy systems that block access. Hitting one drains your context.'],
       ],
       stats: [
         { k: 'depth', l: 'Deepest point reached', unit: ' m' },
@@ -73,11 +73,11 @@
     },
     'clear-cut': {
       title: 'Clear Cut', href: 'clear-cut.html',
-      blurb: 'Cut through the barriers between your AI and your information. Never cut governance.',
+      blurb: 'Cut through the barriers between your AI and your content. Never cut governance.',
       meaning: [
-        ['Frosted panes', 'The barriers: silos, legacy apps, hidden data and scattered files.'],
+        ['Frosted panes', 'The barriers around your unstructured content: silos, legacy apps, hidden data and scattered files.'],
         ['Cutting', 'Clearing a barrier makes the document behind it visible to your AI.'],
-        ['Gold seals', 'Governance: security, privacy and compliance. Tap to approve. Never cut through one.'],
+        ['Gold seals', 'The governed, secure layer: security, privacy and compliance. Tap to approve. Never cut through one.'],
       ],
       stats: [
         { k: 'cleared', l: 'Barriers cleared' },
@@ -87,11 +87,45 @@
       ],
       line: s => `${pl(s.cleared || 0, 'barrier')} cleared · ${fmt(s.approved || 0)} approved · ${pl(s.breaches || 0, 'breach', 'breaches')}`,
     },
+    'stack-up': {
+      title: 'Stack Up', href: 'stack-up.html',
+      blurb: 'Build the six layers of your AI stack. Every layer is only as wide as the one beneath it.',
+      meaning: [
+        ['The stack', 'Six layers, bottom to top: infrastructure, systems of record, context, language models, orchestration, agents.'],
+        ['The cut', 'Whatever overhangs the layer below is lost. No layer can be wider than the one it stands on.'],
+        ['Context', 'The blue layer, Context & Connected Data, is the oxygen. Models and agents are only as strong as it is.'],
+        ['The body', 'Skeleton, vital organs, oxygen, brain, nervous system, muscles: one for each layer.'],
+      ],
+      stats: [
+        { k: 'stacks', l: 'Full stacks built' },
+        { k: 'context', l: 'Context layer width', unit: '%' },
+        { k: 'perfect', l: 'Perfect drops' },
+        { k: 'collapses', l: 'Stacks collapsed', bad: true },
+      ],
+      line: s => `${pl(s.stacks || 0, 'stack')} · context ${s.context == null ? '–' : fmt(s.context) + '%'} · ${pl(s.collapses || 0, 'collapse')}`,
+    },
+    'vital-signs': {
+      title: 'Vital Signs', href: 'vital-signs.html',
+      blurb: 'Context is the oxygen of AI. Keep the brain, nerves and muscles breathing.',
+      meaning: [
+        ['The body', 'Your AI. The brain is its models, the nervous system is orchestration, the muscles are its agents.'],
+        ['Oxygen', 'Governed context. Every part uses it up as it works, and stalls without it.'],
+        ['Raw content', 'Unstructured and ungoverned: emails, files, records. Tap to govern it and it becomes oxygen.'],
+        ['Stalls', 'A part that runs out of oxygen stops. Feed it raw content and it chokes.'],
+      ],
+      stats: [
+        { k: 'oxygen', l: 'Average oxygen level', unit: '%' },
+        { k: 'fed', l: 'Context delivered' },
+        { k: 'governed', l: 'Raw content governed' },
+        { k: 'stalls', l: 'Stalls', bad: true },
+      ],
+      line: s => `Oxygen ${fmt(s.oxygen || 0)}% · ${fmt(s.fed || 0)} delivered · ${pl(s.stalls || 0, 'stall')}`,
+    },
   };
 
   /* ---------- Device-local data ---------- */
   const DB_KEY = 'bs_db_v2';
-  const LAYERS = ['Cloud apps', 'Shared drives', 'Email archives', 'Legacy applications', 'Core systems', 'Offline archives'];
+  const LAYERS = ['Cloud apps', 'Shared drives', 'Email archives', 'Legacy applications', 'Systems of record', 'Offline archives'];
   const db = () => {
     const d = store.get(DB_KEY, { players: {} });
     // Deep Dive used to be "Back to 1964": carry saved rounds over and restate their stats as depth.

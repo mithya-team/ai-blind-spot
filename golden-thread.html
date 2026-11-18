@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=14">
+<link rel="stylesheet" href="shared/common.css?v=15">
 <style>
   :root {
     --bg: #081329; --fg: #f3ead6; --accent: #d9b25f; --on-accent: #0b1733;
@@ -21,7 +21,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/common.js?v=14"></script>
+<script src="shared/common.js?v=15"></script>
 <script>
 (() => {
   const cv = document.getElementById('c');
@@ -1171,7 +1171,7 @@
   const tutorial = [
     {
       title: 'Touch a fragment',
-      text: 'Put one finger on any fragment. Each is a piece of your content: a contract, email, invoice, ticket or customer record.',
+      text: 'Put one finger on any fragment. Each is a piece of unstructured content: a contract, email, invoice, ticket or customer record.',
       demo(c, w, h, T) {
         const L = 3.6, t = T % L;
         demoBg(c, w, h);
@@ -1190,7 +1190,7 @@
     },
     {
       title: 'Drag through more',
-      text: 'Without lifting, slide through other fragments to link them into one golden thread.',
+      text: 'Without lifting, slide through other fragments to link them into one golden thread. Connected data is what gives your AI context.',
       demo(c, w, h, T) {
         const L = 4.8, t = T % L;
         demoBg(c, w, h);
@@ -1324,7 +1324,7 @@
   for (let i = 0; i < 11; i++) spawnNode(i * .08); // ambient drift behind the start card
   BS.init({
     id: 'golden-thread',
-    tagline: 'Your AI is only as good as the fragments it can connect.',
+    tagline: 'Connected data is context. Your AI is only as good as the fragments it can connect.',
     tutorial,
     onStart: start,
   });

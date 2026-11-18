@@ -33,7 +33,7 @@
   h1 { font-family: var(--font-head); font-weight: 700; font-size: clamp(38px, 11.5vw, 50px); letter-spacing: -.04em; line-height: 1; margin: 30px 0 18px; }
   h1 small { display: block; font-size: .3em; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #8fb0ff; margin: 0 0 10px 2px; }
 
-  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 18px; background: var(--glass); border: 1px solid var(--line); margin-bottom: 18px; }
+  .tabs { display: grid; grid-template-columns: repeat(var(--tabs, 4), 1fr); gap: 4px; padding: 4px; border-radius: 18px; background: var(--glass); border: 1px solid var(--line); margin-bottom: 18px; }
   .tabs a { display: grid; place-items: center; text-align: center; padding: 9px 3px; min-height: 46px; border-radius: 14px; color: var(--dim); text-decoration: none; font-size: 12.5px; font-weight: 600; line-height: 1.15; transition: background .2s, color .2s; }
   .tabs a.on { background: var(--acc); color: var(--acc-ink); box-shadow: 0 10px 22px -12px var(--acc); }
 
@@ -64,7 +64,7 @@
   .chips span { font-size: 11.5px; line-height: 1; padding: 5px 8px; border-radius: 8px; background: rgba(255,255,255,.07); color: var(--dim); white-space: nowrap; }
   /* Overall tab: one small tile per game */
   li.ov .pos { grid-row: 1 / 3; }
-  .chips.parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-column: 2 / -1; margin-top: 0; }
+  .chips.parts { display: grid; grid-template-columns: repeat(var(--pn, 3), minmax(0, 1fr)); grid-column: 2 / -1; margin-top: 0; }
   .chips.parts span { padding: 6px 6px 7px 7px; font-size: 10px; font-weight: 600; letter-spacing: .01em; color: var(--c); overflow: hidden; text-overflow: ellipsis; }
   .chips.parts span i { display: none; }
   .chips.parts b { display: block; margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
@@ -78,6 +78,7 @@
   .screen .wrap { max-width: 1280px; padding-top: 32px; }
   .screen h1 { font-size: 54px; margin: 22px 0 18px; }
   .screen .bs-lg { width: 46px; height: 46px; }
+  .screen .tabs { grid-template-columns: repeat(var(--tabsw, 4), 1fr); }
   .screen .tabs a { font-size: 20px; padding: 13px; }
   .screen .head h2 { font-size: 46px; } .screen .head p { font-size: 20px; max-width: 70ch; } .screen .head .cnt { font-size: 15px; }
   .screen ol { gap: 9px; }
@@ -90,7 +91,7 @@
   .screen .chips span { font-size: 17px; padding: 8px 13px; border-radius: 10px; }
   .screen li.ov { grid-template-columns: 54px 1fr auto auto; }
   .screen li.ov .pos { grid-row: auto; }
-  .screen .chips.parts { grid-template-columns: repeat(3, auto); grid-column: 3; grid-row: 1; }
+  .screen .chips.parts { grid-template-columns: repeat(var(--n, 3), auto); grid-column: 3; grid-row: 1; }
   .screen li.ov .sc { grid-column: 4; grid-row: 1; }
   .screen .chips.parts span { font-size: 15px; padding: 8px 14px 9px; font-weight: 500; color: var(--dim); }
   .screen .chips.parts span i { display: inline-block; }
@@ -111,7 +112,8 @@
     html:not(.screen) .chips span { font-size: 12.5px; padding: 7px 10px; }
     html:not(.screen) li.ov { grid-template-columns: 40px 1fr auto auto; }
     html:not(.screen) li.ov .pos { grid-row: auto; }
-    html:not(.screen) .chips.parts { grid-template-columns: repeat(3, auto); grid-column: 3; grid-row: 1; }
+    html:not(.screen) .tabs { grid-template-columns: repeat(var(--tabsw, 4), 1fr); }
+    html:not(.screen) .chips.parts { grid-template-columns: repeat(var(--n, 3), auto); grid-column: 3; grid-row: 1; }
     html:not(.screen) .chips.parts span { font-size: 11.5px; font-weight: 500; color: var(--dim); padding: 7px 12px 8px; }
     html:not(.screen) .chips.parts span i { display: inline-block; }
     html:not(.screen) .chips.parts b { font-size: 17px; }
@@ -131,12 +133,14 @@
   <ol id="rows"></ol>
   <p class="note"><span id="how"></span>Each player's best attempt in a game counts. A practice score counts only until they play an attempt.<br>Prototype: this shows scores saved on this device.</p>
 </div>
-<script src="shared/common.js?v=14"></script>
+<script src="shared/common.js?v=15"></script>
 <script>
   const LOOK = {
     'golden-thread': { acc: '#f1d48a', ink: '#1a1405', wash: 'rgba(64,84,170,.5)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Thread' },
     'deep-dive': { acc: '#9eeaff', ink: '#04202c', wash: 'rgba(28,110,150,.5)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Deep Dive' },
     'clear-cut': { acc: '#d9ccff', ink: '#1d1640', wash: 'rgba(120,96,200,.42)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Clear Cut' },
+    'stack-up': { acc: '#8ff0c0', ink: '#04251a', wash: 'rgba(30,120,90,.45)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Stack Up' },
+    'vital-signs': { acc: '#ffa3b6', ink: '#2a0a16', wash: 'rgba(150,50,90,.42)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Vitals' },
     overall: { acc: '#a9c1ff', ink: '#081238', wash: 'rgba(54,78,160,.42)', font: 'Inter, sans-serif', weight: 700, track: '-.03em' },
   };
   const OVERALL = { title: 'Overall', blurb: 'Each game is worth up to 1,000 points. The top score in a game sets 1,000, and every other score is scaled against it.' };
@@ -145,6 +149,11 @@
   const wide = () => screen || matchMedia('(min-width: 900px)').matches;
   document.getElementById('logos').innerHTML = BS.LOGOS;
   if (screen) document.documentElement.classList.add('screen');
+  { // tab and tile counts follow the number of games: phones wrap the tabs into rows of three once there are more than four
+    const rs = document.documentElement.style;
+    rs.setProperty('--n', games.length); rs.setProperty('--pn', Math.min(3, games.length));
+    rs.setProperty('--tabs', ids.length > 4 ? 3 : ids.length); rs.setProperty('--tabsw', ids.length);
+  }
   const cur = () => ids.includes(location.hash.slice(1)) ? location.hash.slice(1) : ids[0];
   function render(animate) {
     const id = cur(), all_ = id === 'overall', g = all_ ? OVERALL : BS.GAMES[id], L = LOOK[id], p = BS.player(), me = (p.name + '|' + p.company).toLowerCase();

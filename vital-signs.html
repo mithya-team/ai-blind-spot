@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Vital Signs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/common.css?v=15">
+<style>
+  :root {
+    --bg: #150a14; --fg: #ffeef2; --accent: #ff9db2; --on-accent: #2a0a16;
+    --card: rgba(30, 12, 26, .86); --line: rgba(255, 157, 178, .22); --chip: rgba(255, 157, 178, .07);
+    --input: rgba(255, 255, 255, .05); --scrim: rgba(12, 4, 12, .45); --shadow: 0 24px 70px rgba(0, 0, 0, .6);
+    --font-display: Inter, -apple-system, sans-serif; --display-weight: 700; --font-ui: Inter, -apple-system, sans-serif;
+    --display-tracking: -.025em; --demo-bg: #1b0d1a;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shared/common.js?v=15"></script>
+<script>
+/* Vital Signs: "context is the oxygen of AI", made playable.
+   The figure is an AI. Its brain is the models, its nervous system is orchestration, its muscles are the agents.
+   Each part uses up oxygen as it works. Blue bubbles are governed context (oxygen): drag one onto a part to refill it.
+   Grey bubbles are raw, ungoverned content: tap to govern them first. Feed a part raw content and it chokes.
+   A part that runs out stalls. Three stalls, or the clock, end the round. */
+(() => {
+  const cv = document.getElementById('c');
+  const DURATION = +(BS.params.get('t') || 75), LIVES = 3;
+  const FONT = 'Inter, -apple-system, sans-serif', INK = '#ffeef2', ROSE = '#ff9db2', O2 = '#9fe8ff', AMBER = '#ffc46b', RED = '#ff6b6b';
+  const FEED = .36, CHOKE = .28, REVIVE = .45, STALL_T = 1.6;
+  const PARTS = {
+    brain: { name: 'Brain', role: 'Language models', k: 1.1 },
+    nerve: { name: 'Nervous system', role: 'Orchestration', k: .9 },
+    muscle: { name: 'Muscles', role: 'Agents', k: 1 },
+  };
+  const KEYS = Object.keys(PARTS);
+  // The whole analogy, for the legend on wide screens.
+  const LEGEND = [['Muscles', 'Application & Agents'], ['Nervous system', 'Orchestration'], ['Brain', 'Language Models'], ['Oxygen', 'Context & Connected Data'], ['Vital organs', 'Systems of Record'], ['Skeleton', 'Infrastructure']];
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const TRK = new Map();
+  const trk = s => { let v = TRK.get(s); if (!v) TRK.set(s, v = s.toUpperCase().split('').join(' ')); return v; };
+  const rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  let RM = !!(rmq && rmq.matches);
+  if (rmq && rmq.addEventListener) rmq.addEventListener('change', e => { RM = e.matches; });
+
+  let ctx, W, H, L, bg = null;
+  let parts = {}, bubbles = [], pops = [], grab = null, ecg = [];
+  let running = false, over = false, time = 0, clock = 0, score = 0, shown = 0, lives = LIVES;
+  let fed = 0, governed = 0, stalls = 0, chokes = 0, flowT = 0, tick = 0, oxySum = 0, oxyN = 0;
+  let spawnCd = 0, surgeCd = 6, warnSec = 0, shake = 0, beat = 0, lifeAt = -9, ecgAcc = 0, hintY = 0, taught = 0;
+
+  // ---------- layout ----------
+  // The figure is drawn in units of S around its chest. Targets are where oxygen can be dropped.
+  function layout(w, h, demo) {
+    const r = demo ? clamp(Math.min(w, h) * .085, 14, 26) : clamp(Math.min(w, h) * .075, 25, 34);
+    let F, slots = [];
+    if (demo) {
+      const S = Math.min((h - 16) / 1.25, w * .42); // cropped at the waist so the parts stay large
+      F = { cx: w * .38, cy: 10 + .8 * S, S };
+      slots = [{ x: w * .84, y: h * .72 }, { x: w * .86, y: h * .34 }];
+    } else {
+      const row2 = h - 58 - r, row1 = row2 - r * 2.1, top = 122, bot = row1 - r - 16;
+      const S = Math.min((bot - top) / 1.7, (w - 36) / 1.42, 330);
+      F = { cx: w / 2, cy: top + (bot - top - 1.7 * S) / 2 + .82 * S, S };
+      const gap = Math.min(r * 3.3, (Math.min(w, 560) - 2 * r - 24) / 2.5);
+      for (let i = 0; i < 3; i++) slots.push({ x: w / 2 + (i - 1) * gap - gap * .25, y: row1 });
+      for (let i = 0; i < 3; i++) slots.push({ x: w / 2 + (i - 1) * gap + gap * .25, y: row2 });
+    }
+    const S = F.S, at = (x, y, rr, k) => ({ k, x: F.cx + x * S, y: F.cy + y * S, r: rr * S });
+    const tg = [at(0, -.62, .17, 'brain'), at(0, .12, .125, 'nerve'), at(-.46, -.09, .115, 'muscle'), at(.46, -.09, .115, 'muscle')];
+    return { w, h, r, F, slots, tg, wide: !demo && w >= 1000 };
+  }
+  function resize() {
+    ({ ctx, w: W, h: H } = BS.fit(cv));
+    L = layout(W, H);
+    bg = document.createElement('canvas');
+    const d = Math.min(2, window.devicePixelRatio || 1);
+    bg.width = Math.round(W * d); bg.height = Math.round(H * d);
+    const b = bg.getContext('2d'); b.setTransform(d, 0, 0, d, 0, 0);
+    paintBg(b, W, H);
+    ecg = new Array(Math.ceil(W / 2) + 2).fill(0);
+    for (const bb of bubbles) { const s = L.slots[bb.slot]; if (s) { bb.hx = s.x; bb.hy = s.y; } }
+    placeHint();
+  }
+  function placeHint() { hintY = L.slots[0].y - L.r - 16; }
+
+  // ---------- drawing ----------
+  function paintBg(c, w, h) {
+    const v = c.createLinearGradient(0, 0, 0, h);
+    v.addColorStop(0, '#0e060e'); v.addColorStop(.5, '#1a0b19'); v.addColorStop(1, '#0b050b');
+    c.fillStyle = v; c.fillRect(0, 0, w, h);
+    let s = 11;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    for (let i = 0; i < 80; i++) { c.fillStyle = `rgba(255,214,224,${.05 + rnd() * .16})`; c.beginPath(); c.arc(rnd() * w, rnd() * h, .5 + rnd() * 1, 0, 7); c.fill(); }
+  }
+  const levelColor = (lv, t) => lv > .5 ? '#ffe3ea' : lv > .25 ? AMBER : (Math.sin(t * 11) > 0 ? RED : '#ff9a9a');
+
+  // The figure itself: a faint body, the skeleton, then the three systems that glow with their oxygen level.
+  function drawFigure(c, F, st, t, pulse) {
+    const S = F.S, X = x => F.cx + x * S, Y = y => F.cy + y * S;
+    const lv = k => st[k].stall > 0 ? 0 : st[k].lv, avg = (lv('brain') + lv('nerve') + lv('muscle')) / 3;
+    const path = pts => { c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(X(x), Y(y)) : c.moveTo(X(x), Y(y))); };
+    c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+    const aura = c.createRadialGradient(X(0), Y(-.05), 0, X(0), Y(-.05), S * 1.2);
+    aura.addColorStop(0, `rgba(255,110,150,${.08 + .16 * avg + .05 * pulse})`); aura.addColorStop(1, 'rgba(255,110,150,0)');
+    c.fillStyle = aura; c.fillRect(X(-1.25), Y(-1.25), S * 2.5, S * 2.5);
+    // torso
+    c.beginPath(); c.moveTo(X(-.4), Y(-.3)); c.quadraticCurveTo(X(-.2), Y(-.39), X(0), Y(-.37)); c.quadraticCurveTo(X(.2), Y(-.39), X(.4), Y(-.3));
+    c.quadraticCurveTo(X(.3), Y(.04), X(.25), Y(.22)); c.quadraticCurveTo(X(.23), Y(.4), X(.27), Y(.54)); c.lineTo(X(-.27), Y(.54));
+    c.quadraticCurveTo(X(-.23), Y(.4), X(-.25), Y(.22)); c.quadraticCurveTo(X(-.3), Y(.04), X(-.4), Y(-.3)); c.closePath();
+    const body = c.createLinearGradient(0, Y(-.4), 0, Y(.6)); body.addColorStop(0, 'rgba(255,170,190,.13)'); body.addColorStop(1, 'rgba(255,170,190,.03)');
+    c.fillStyle = body; c.fill(); c.strokeStyle = 'rgba(255,200,214,.2)'; c.lineWidth = 1.2; c.stroke();
+    // skeleton: spine, collarbones, ribs, arms, pelvis, thighs fading out
+    c.strokeStyle = 'rgba(255,220,228,.3)'; c.lineWidth = Math.max(1.4, S * .011);
+    path([[0, -.45], [0, .5]]); c.stroke();
+    for (let y = -.3; y < .5; y += .075) { path([[-.022, y], [.022, y]]); c.stroke(); }
+    path([[-.4, -.3], [0, -.33], [.4, -.3]]); c.stroke();
+    for (let i = 0; i < 4; i++) {
+      const y = -.24 + i * .095, wv = .25 - i * .012;
+      for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(X(0), Y(y)); c.quadraticCurveTo(X(sx * wv), Y(y - .02), X(sx * wv), Y(y + .07)); c.stroke(); }
+    }
+    for (const sx of [-1, 1]) {
+      path([[sx * .4, -.3], [sx * .52, .12], [sx * .46, .5]]); c.stroke();
+      c.beginPath(); c.moveTo(X(sx * .26), Y(.46)); c.quadraticCurveTo(X(sx * .2), Y(.62), X(0), Y(.6)); c.stroke();
+      const fem = c.createLinearGradient(0, Y(.56), 0, Y(.88)); fem.addColorStop(0, 'rgba(255,220,228,.3)'); fem.addColorStop(1, 'rgba(255,220,228,0)');
+      c.save(); c.strokeStyle = fem; path([[sx * .2, .58], [sx * .24, .88]]); c.stroke(); c.restore();
+    }
+    c.beginPath(); c.arc(X(0), Y(-.62), S * .17, 0, 7); c.stroke();
+    // muscles: the upper arms
+    const m = lv('muscle'), mOff = st.muscle.stall > 0;
+    c.lineWidth = S * .12; c.strokeStyle = mOff ? 'rgba(140,125,135,.3)' : `rgba(255,140,170,${.14 + .42 * m})`;
+    for (const sx of [-1, 1]) { path([[sx * .415, -.24], [sx * .505, .06]]); c.stroke(); }
+    c.lineWidth = S * .07; c.strokeStyle = mOff ? 'rgba(140,125,135,.2)' : `rgba(255,140,170,${.08 + .22 * m})`;
+    for (const sx of [-1, 1]) { path([[sx * .515, .18], [sx * .47, .44]]); c.stroke(); }
+    // nervous system: signals run along the filaments while it has oxygen
+    const n = lv('nerve'), nOff = st.nerve.stall > 0;
+    c.lineWidth = Math.max(1.2, S * .008); c.strokeStyle = nOff ? 'rgba(150,140,150,.35)' : `rgba(255,236,180,${.18 + .7 * n})`;
+    c.setLineDash([S * .03, S * .04]); c.lineDashOffset = nOff ? 0 : -t * S * (.12 + .3 * n);
+    path([[0, .12], [0, -.45]]); c.stroke();
+    for (const sx of [-1, 1]) {
+      path([[0, -.2], [sx * .36, -.27], [sx * .5, .1], [sx * .45, .46]]); c.stroke();
+      path([[0, .12], [0, .44], [sx * .19, .57], [sx * .23, .8]]); c.stroke();
+      path([[0, 0], [sx * .19, .04]]); c.stroke(); path([[0, .26], [sx * .17, .3]]); c.stroke();
+    }
+    c.setLineDash([]);
+    // brain folds
+    const b = lv('brain'), bOff = st.brain.stall > 0;
+    c.lineWidth = Math.max(1.3, S * .012); c.strokeStyle = bOff ? 'rgba(150,140,150,.4)' : `rgba(255,214,235,${.2 + .7 * b})`;
+    for (let i = -1; i <= 1; i++) {
+      const y = -.62 + i * .065, wv = i ? .085 : .115;
+      c.beginPath(); c.moveTo(X(-wv), Y(y));
+      c.bezierCurveTo(X(-wv * .5), Y(y - .05), X(-wv * .2), Y(y + .05), X(0), Y(y)); c.bezierCurveTo(X(wv * .2), Y(y - .05), X(wv * .5), Y(y + .05), X(wv), Y(y)); c.stroke();
+    }
+    // heart: the vital organs, beating
+    const hr = S * (.034 + .014 * pulse), hx = X(-.1), hy = Y(-.14);
+    const hg = c.createRadialGradient(hx, hy, 0, hx, hy, hr * 3.2); hg.addColorStop(0, `rgba(255,90,120,${.5 + .4 * pulse})`); hg.addColorStop(1, 'rgba(255,90,120,0)');
+    c.fillStyle = hg; c.beginPath(); c.arc(hx, hy, hr * 3.2, 0, 7); c.fill();
+    c.fillStyle = '#ff7d99'; c.beginPath(); c.arc(hx, hy, hr, 0, 7); c.fill();
+    c.restore();
+  }
+
+  // A target node: dark disc, glow by level, and a ring that shows how much oxygen is left.
+  function drawNode(c, g, st, t, hot) {
+    const { x, y, r } = g, off = st.stall > 0, lv = off ? 0 : st.lv, col = off ? '#8c7d87' : levelColor(lv, t);
+    c.save();
+    if (st.surge > 0 && !off) { // working hard: rings push outwards
+      for (let i = 0; i < 2; i++) { const k = (t * 1.3 + i * .5) % 1; c.strokeStyle = `rgba(255,196,107,${.5 * (1 - k)})`; c.lineWidth = 1.5; c.beginPath(); c.arc(x, y, r * (1.15 + k * .7), 0, 7); c.stroke(); }
+    }
+    c.fillStyle = 'rgba(24,9,20,.72)'; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+    if (!off) { const gl = c.createRadialGradient(x, y, 0, x, y, r); gl.addColorStop(0, `rgba(255,150,180,${.1 + .5 * lv})`); gl.addColorStop(1, 'rgba(255,150,180,0)'); c.fillStyle = gl; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
+    const lw = Math.max(3, r * .13) * (hot ? 1.5 : 1);
+    c.lineWidth = lw; c.strokeStyle = 'rgba(255,230,236,.16)'; c.beginPath(); c.arc(x, y, r, 0, 7); c.stroke();
+    if (lv > 0) { c.lineCap = 'round'; c.strokeStyle = col; c.beginPath(); c.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * lv); c.stroke(); }
+    if (hot) { c.strokeStyle = 'rgba(159,232,255,.8)'; c.lineWidth = 1.5; c.setLineDash([4, 5]); c.beginPath(); c.arc(x, y, r + lw + 4, 0, 7); c.stroke(); c.setLineDash([]); }
+    if (st.flash > 0) { c.strokeStyle = `rgba(159,232,255,${st.flash})`; c.lineWidth = 3; c.beginPath(); c.arc(x, y, r + (1 - st.flash) * r * .9, 0, 7); c.stroke(); c.fillStyle = `rgba(159,232,255,${st.flash * .35})`; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
+    if (st.bad > 0) { c.fillStyle = `rgba(255,70,80,${st.bad * .55})`; c.beginPath(); c.arc(x, y, r * 1.15, 0, 7); c.fill(); }
+    if (off) { c.font = `700 ${clamp(r * .3, 8, 11)}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#ffb0b0'; c.fillText(trk('Stalled'), x, y); }
+    c.restore();
+  }
+  function drawLabels(c, lay, small) {
+    const [b, n, , mr] = lay.tg, f1 = small ? 8 : 9.5, f2 = small ? 9 : 11.5;
+    c.save(); c.textBaseline = 'alphabetic';
+    const put = (name, role, x, y, align) => {
+      c.textAlign = align; c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = 'rgba(20,8,18,.85)';
+      c.font = `700 ${f1}px ${FONT}`; c.strokeText(trk(name), x, y); c.fillStyle = 'rgba(255,238,242,.95)'; c.fillText(trk(name), x, y);
+      if (small) return;
+      c.font = `500 ${f2}px ${FONT}`; c.strokeText(role, x, y + f2 + 3); c.fillStyle = 'rgba(255,238,242,.7)'; c.fillText(role, x, y + f2 + 3);
+    };
+    put(PARTS.brain.name, PARTS.brain.role, b.x + b.r + 12, b.y - (small ? -3 : 4), 'left');
+    put(PARTS.nerve.name, PARTS.nerve.role, n.x, n.y + n.r + 17, 'center');
+    put(PARTS.muscle.name, PARTS.muscle.role, mr.x, mr.y + mr.r + 17, 'center');
+    c.restore();
+  }
+
+  // kind: 0 = raw content (grey, dashed, a page), 1 = oxygen (blue, O2). Values in between cross-fade while it is governed.
+  function drawBubble(c, x, y, r, kind, t, o = {}) {
+    const sc = o.scale == null ? 1 : o.scale;
+    if (sc <= 0) return;
+    c.save(); c.translate(x, y); c.scale(sc, sc); if (o.alpha != null) c.globalAlpha *= o.alpha;
+    const face = (k, a) => {
+      if (a <= 0) return;
+      c.save(); c.globalAlpha *= a;
+      const g = c.createRadialGradient(-r * .3, -r * .35, r * .1, 0, 0, r);
+      if (k) { g.addColorStop(0, '#f4fdff'); g.addColorStop(.45, '#8fe0ff'); g.addColorStop(1, '#2f9bd8'); }
+      else { g.addColorStop(0, '#b9adb8'); g.addColorStop(.5, '#7b6f7c'); g.addColorStop(1, '#4a4050'); }
+      if (k) { c.shadowColor = 'rgba(120,220,255,.7)'; c.shadowBlur = r * .7; }
+      c.fillStyle = g; c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.shadowBlur = 0;
+      c.lineWidth = 1.6; c.strokeStyle = k ? 'rgba(255,255,255,.85)' : 'rgba(255,230,236,.6)';
+      if (!k) c.setLineDash([4, 4]);
+      c.beginPath(); c.arc(0, 0, r - 1, 0, 7); c.stroke(); c.setLineDash([]);
+      if (k) {
+        c.fillStyle = '#0b3550'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = `700 ${r * .72}px ${FONT}`; c.fillText('O', -r * .12, r * .02);
+        c.font = `700 ${r * .4}px ${FONT}`; c.fillText('2', r * .3, r * .24);
+        c.fillStyle = 'rgba(255,255,255,.75)'; c.beginPath(); c.ellipse(-r * .38, -r * .48, r * .2, r * .11, -.6, 0, 7); c.fill();
+      } else {
+        const pw = r * .64, ph = r * .82, fx = pw * .32;
+        c.fillStyle = 'rgba(245,238,244,.92)';
+        c.beginPath(); c.moveTo(-pw / 2, -ph / 2); c.lineTo(pw / 2 - fx, -ph / 2); c.lineTo(pw / 2, -ph / 2 + fx); c.lineTo(pw / 2, ph / 2); c.lineTo(-pw / 2, ph / 2); c.closePath(); c.fill();
+        c.fillStyle = 'rgba(74,64,80,.75)';
+        for (let i = 0; i < 3; i++) c.fillRect(-pw * .3, -ph * .12 + i * ph * .2, pw * (i === 2 ? .38 : .6), Math.max(1.4, r * .06));
+      }
+      c.restore();
+    };
+    face(0, 1 - kind); face(1, kind);
+    if (o.ring > 0) { c.strokeStyle = `rgba(159,232,255,${o.ring})`; c.lineWidth = 2.5; c.beginPath(); c.arc(0, 0, r * (1 + (1 - o.ring) * .9), 0, 7); c.stroke(); }
+    c.restore();
+  }
+
+  function drawPops(c, list) {
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const p of list) {
+      const k = p.life / p.max, up = (1 - k) * 30;
+      c.globalAlpha = clamp(k * 2.4, 0, 1) * clamp((1 - k) * 8, 0, 1);
+      c.font = `700 ${p.size}px ${FONT}`;
+      c.lineWidth = 4; c.strokeStyle = 'rgba(14,5,14,.75)'; c.strokeText(p.text, p.x, p.y - up);
+      c.fillStyle = p.color; c.fillText(p.text, p.x, p.y - up);
+    }
+    c.globalAlpha = 1;
+  }
+  function drawLives(c, x, y, n, lostAt, now) {
+    for (let i = 0; i < LIVES; i++) {
+      const on = i < n, bx = x + (i - (LIVES - 1) / 2) * 16, k = !on && i === n ? clamp((now - lostAt) * 2.5, 0, 1) : 1;
+      c.fillStyle = on ? ROSE : `rgba(255,107,107,${.9 - .6 * k})`;
+      c.beginPath(); c.arc(bx, y, 4, 0, 7); c.fill();
+    }
+  }
+  // One heartbeat, p from 0 to 1.
+  function wave(p) {
+    if (p < .08) return 0;
+    if (p < .16) return .12 * Math.sin(Math.PI * (p - .08) / .08);
+    if (p < .22) return 0;
+    if (p < .25) return lerp(0, -.15, (p - .22) / .03);
+    if (p < .29) return lerp(-.15, 1, (p - .25) / .04);
+    if (p < .33) return lerp(1, -.3, (p - .29) / .04);
+    if (p < .36) return lerp(-.3, 0, (p - .33) / .03);
+    if (p < .48) return 0;
+    if (p < .64) return .22 * Math.sin(Math.PI * (p - .48) / .16);
+    return 0;
+  }
+  function drawEcg(c, w, y, amp) {
+    c.save(); c.lineWidth = 1.6; c.lineJoin = 'round';
+    const g = c.createLinearGradient(0, 0, w, 0); g.addColorStop(0, 'rgba(255,157,178,0)'); g.addColorStop(.25, 'rgba(255,157,178,.5)'); g.addColorStop(1, 'rgba(255,157,178,.95)');
+    c.strokeStyle = g; c.beginPath();
+    for (let i = 0; i < ecg.length; i++) { const x = w - (ecg.length - 1 - i) * 2; if (i) c.lineTo(x, y - ecg[i] * amp); else c.moveTo(x, y - ecg[i] * amp); }
+    c.stroke();
+    c.fillStyle = '#ffd3dc'; c.beginPath(); c.arc(w - 1, y - ecg[ecg.length - 1] * amp, 2.4, 0, 7); c.fill();
+    c.restore();
+  }
+  const mult = () => 1 + Math.min(4, Math.floor(flowT / 6));
+  function drawHud(c, w) {
+    const top = c.createLinearGradient(0, 0, 0, 122);
+    top.addColorStop(0, 'rgba(12,4,12,.95)'); top.addColorStop(.6, 'rgba(12,4,12,.7)'); top.addColorStop(1, 'rgba(12,4,12,0)');
+    c.fillStyle = top; c.fillRect(0, 0, w, 122);
+    drawEcg(c, w, 92, 15);
+    if (!running && !over) return;
+    const left = Math.max(0, DURATION - time), mm = Math.floor(left / 60), ss = String(Math.floor(left % 60)).padStart(2, '0');
+    c.textBaseline = 'alphabetic';
+    c.textAlign = 'left'; c.font = `700 9.5px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.6)'; c.fillText(trk('Score'), 18, 28);
+    c.font = `700 22px ${FONT}`; c.fillStyle = INK; c.fillText(BS.fmt(shown), 18, 52);
+    c.textAlign = 'right'; c.font = `700 9.5px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.6)'; c.fillText(trk('Time'), w - 18, 28);
+    c.font = `700 22px ${FONT}`; c.fillStyle = left <= 5 && running ? '#ff9a8c' : INK; c.fillText(`${mm}:${ss}`, w - 18, 52);
+    const m = mult();
+    c.textAlign = 'center'; c.font = `700 9.5px ${FONT}`; c.fillStyle = m > 1 ? ROSE : 'rgba(255,238,242,.6)'; c.fillText(trk(m > 1 ? `Steady ×${m}` : 'Stalls left'), w / 2, 28);
+    drawLives(c, w / 2, 43, lives, lifeAt, clock);
+    c.fillStyle = 'rgba(255,238,242,.1)'; c.fillRect(0, 0, w, 3);
+    c.fillStyle = ROSE; c.fillRect(0, 0, w * clamp(1 - time / DURATION, 0, 1), 3);
+  }
+  function drawLegend(c, lay) {
+    const x = Math.max(40, lay.F.cx - lay.F.S * 1.05 - 300), y0 = lay.F.cy - lay.F.S * .5;
+    c.save(); c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    c.font = `700 9.5px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.5)'; c.fillText(trk('The AI body'), x, y0 - 22);
+    LEGEND.forEach(([part, layer], i) => {
+      const y = y0 + i * 42, key = part === 'Oxygen';
+      c.fillStyle = key ? O2 : 'rgba(255,157,178,.8)'; c.beginPath(); c.arc(x + 4, y - 5, 4, 0, 7); c.fill();
+      c.font = `700 15px ${FONT}`; c.fillStyle = key ? O2 : 'rgba(255,238,242,.9)'; c.fillText(part, x + 18, y);
+      c.font = `500 12px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.5)'; c.fillText(layer, x + 18, y + 17);
+    });
+    c.restore();
+  }
+
+  function draw() {
+    const c = ctx;
+    c.save();
+    if (shake > 0 && !RM) c.translate(rand(-1, 1) * shake * 9, rand(-1, 1) * shake * 9);
+    c.drawImage(bg, 0, 0, W, H);
+    const pulse = Math.max(0, wave(beat % 1));
+    drawFigure(c, L.F, parts, clock, pulse);
+    if (L.wide) drawLegend(c, L);
+    const hot = grab && grab.moved ? nearest(grab.b.x, grab.b.y) : null;
+    L.tg.forEach(g => drawNode(c, g, parts[g.k], clock, hot && hot.k === g.k && parts[g.k].stall <= 0));
+    drawLabels(c, L, false);
+    // the supply line: where context arrives
+    const s0 = L.slots[0];
+    c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.font = `700 9px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.34)';
+    if ((running && taught >= 2) || over) c.fillText(trk('Incoming content'), W / 2, s0.y - L.r - 8);
+    for (const b of bubbles) {
+      if (b === (grab && grab.b)) continue;
+      const k = b.kind ? clamp((clock - b.gov) / .25, 0, 1) : 0;
+      const o = b.state === 'eat' ? { scale: 1 - b.t / .2 } : b.state === 'pop' ? { scale: 1 + b.t * 1.6, alpha: 1 - b.t / .25 } : { scale: clamp((clock - b.born) * 5, 0, 1), ring: b.kind ? clamp(1 - (clock - b.gov) / .45, 0, 1) : 0 };
+      drawBubble(c, b.x, b.y, L.r, b.kind ? k : 0, clock, o);
+    }
+    if (grab) drawBubble(c, grab.b.x, grab.b.y, L.r, grab.b.kind ? 1 : 0, clock, { scale: 1.1 });
+    if (running || over) drawPops(c, pops);
+    c.restore();
+    drawHud(c, W);
+    if (running && taught < 2) {
+      const a = clamp(time * 2, 0, 1) * (.78 + .22 * Math.sin(clock * 3.2));
+      c.globalAlpha = a; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+      c.font = `700 14.5px ${FONT}`; c.fillStyle = INK;
+      c.fillText(taught === 0 ? 'Drag a blue bubble onto a part' : 'Tap a grey bubble to govern it', W / 2, hintY - 18);
+      c.font = `500 12px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.75)';
+      c.fillText(taught === 0 ? 'Feed whichever ring is running low' : 'Raw content becomes oxygen', W / 2, hintY);
+      c.globalAlpha = 1;
+    }
+  }
+
+  // ---------- play ----------
+  function pop(x, y, text, size, color, life = 1.1) {
+    if (running) pops.push({ x: clamp(x, 76, W - 76), y: Math.max(126, y), text, size, color, life, max: life });
+  }
+  function nearest(x, y) {
+    let best = null, bd = 1e9;
+    for (const g of L.tg) { const d = Math.hypot(g.x - x, g.y - y) - g.r; if (d < L.r * 1.1 && d < bd) { bd = d; best = g; } }
+    return best;
+  }
+  function spawnBubble(kind) {
+    const used = new Set(bubbles.filter(b => b.state !== 'eat' && b.state !== 'pop').map(b => b.slot));
+    const free = L.slots.map((_, i) => i).filter(i => !used.has(i));
+    if (!free.length) return false;
+    const slot = free[Math.floor(Math.random() * free.length)], s = L.slots[slot];
+    bubbles.push({ slot, hx: s.x, hy: s.y, x: s.x + rand(-20, 20), y: H + L.r + 10, kind, gov: -9, born: clock, state: 'in', t: 0, ph: rand(0, 6) });
+    return true;
+  }
+  function govern(b) {
+    b.kind = 1; b.gov = clock; governed++; score += 5;
+    if (taught === 1) taught = 2;
+    BS.sfx('link', { n: governed % 8 }); BS.vibrate(8);
+    pop(b.x, b.y - L.r - 12, 'Governed', 14, O2, .9);
+  }
+  function feed(b, g) {
+    const p = parts[g.k];
+    if (p.stall > 0) { b.state = 'back'; return; }
+    if (!b.kind) { // raw content: the part chokes
+      p.lv = Math.max(0, p.lv - CHOKE); p.bad = 1; chokes++; flowT = 0; shake = .6;
+      b.state = 'pop'; b.t = 0;
+      BS.sfx('breach'); BS.vibrate([20, 30, 40]);
+      pop(g.x, g.y - g.r - 14, 'Raw content: choked', 15, RED, 1.3);
+      return;
+    }
+    const low = p.lv < .25, pts = (20 + (low ? 10 : 0)) * mult();
+    p.lv = Math.min(1, p.lv + FEED); p.flash = 1; fed++; score += pts;
+    if (taught === 0) taught = governed || !bubbles.some(x => !x.kind) ? 2 : 1;
+    b.state = 'eat'; b.t = 0; b.tx = g.x; b.ty = g.y;
+    BS.sfx('pickup', { n: fed }); BS.vibrate(10);
+    pop(g.x, g.y - g.r - 14, low ? `Just in time  +${pts}` : `+${pts}`, low ? 15 : 14, low ? ROSE : 'rgba(255,238,242,.9)');
+  }
+  function stall(k) {
+    const p = parts[k], g = L.tg.find(x => x.k === k);
+    p.stall = STALL_T; p.lv = 0; p.surge = 0; stalls++; lives--; flowT = 0; lifeAt = clock; shake = 1;
+    BS.sfx('hit'); BS.vibrate([40, 40, 80]);
+    pop(g.x, g.y - g.r - 14, `${PARTS[k].name} stalled`, 17, RED, 1.5);
+    if (lives <= 0) end();
+  }
+
+  function start() {
+    parts = {}; KEYS.forEach(k => { parts[k] = { lv: .8, stall: 0, flash: 0, bad: 0, surge: 0 }; });
+    bubbles = []; pops = []; grab = null;
+    time = 0; score = 0; shown = 0; lives = LIVES; fed = 0; governed = 0; stalls = 0; chokes = 0; flowT = 0; tick = 0; oxySum = 0; oxyN = 0;
+    spawnCd = .9; surgeCd = 7; warnSec = 0; shake = 0; lifeAt = -9; over = false; running = true; taught = 0;
+    placeHint();
+    spawnBubble(1); spawnBubble(1); spawnBubble(0);
+  }
+  function takeaway() {
+    const pct = oxyN ? Math.round(100 * oxySum / oxyN) : 0, times = n => n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
+    if (lives <= 0) return 'Three stalls. Models and agents stop the moment governed context stops reaching them.';
+    if (!stalls && !chokes) return `Not one stall. Your AI ran at ${pct}% oxygen because governed context kept arriving.`;
+    if (chokes && !stalls) return `Your AI ran at ${pct}% oxygen, but it was fed raw, ungoverned content ${times(chokes)} and choked on it.`;
+    return `Your AI ran at ${pct}% oxygen and stalled ${times(stalls)}. Without a steady supply of context, the brain, nerves and muscles stop.`;
+  }
+  function end() {
+    if (over) return;
+    running = false; over = true;
+    if (grab) { grab.b.state = 'back'; grab = null; }
+    setTimeout(() => BS.finish({
+      score,
+      headline: lives <= 0 ? 'Your AI stalled' : 'Time',
+      theme: takeaway(),
+      stats: { oxygen: oxyN ? Math.round(100 * oxySum / oxyN) : 0, fed, governed, stalls },
+      win: false,
+    }), 900);
+  }
+
+  function update(dt) {
+    clock += dt;
+    const attract = !running && !over;
+    if (attract) { // behind the intro card: an idle body, breathing
+      if (!parts.brain) KEYS.forEach(k => { parts[k] = { lv: .7, stall: 0, flash: 0, bad: 0, surge: 0 }; });
+      KEYS.forEach((k, i) => { parts[k].lv = .62 + .3 * Math.sin(clock * .5 + i * 2.1); });
+      if (bubbles.length < 4 && Math.random() < dt * 1.2) spawnBubble(Math.random() < .65 ? 1 : 0);
+    }
+    const avg = parts.brain ? KEYS.reduce((s, k) => s + (parts[k].stall > 0 ? 0 : parts[k].lv), 0) / 3 : .7;
+    if (running) {
+      time += dt;
+      const pr = clamp(time / DURATION, 0, 1), left = DURATION - time;
+      if (left > 0 && left <= 5 && Math.ceil(left) !== warnSec) { warnSec = Math.ceil(left); BS.sfx('warn'); }
+      // every part uses oxygen as it works, faster as the round goes on, and faster still during a surge
+      const base = lerp(.032, .062, pr);
+      for (const k of KEYS) {
+        const p = parts[k];
+        if (p.stall > 0) { p.stall -= dt; if (p.stall <= 0) { p.stall = 0; p.lv = REVIVE; p.flash = .8; } continue; }
+        p.lv -= base * PARTS[k].k * (p.surge > 0 ? 2.1 : 1) * dt;
+        if (p.surge > 0) p.surge -= dt;
+        if (p.lv <= 0 && running) stall(k);
+      }
+      if (running) {
+        surgeCd -= dt;
+        if (surgeCd <= 0) { const live = KEYS.filter(k => parts[k].stall <= 0); if (live.length) parts[live[Math.floor(Math.random() * live.length)]].surge = 3.2; surgeCd = rand(6, 9) - pr * 2; }
+        spawnCd -= dt;
+        if (spawnCd <= 0) {
+          const raws = bubbles.filter(b => !b.kind).length;
+          spawnBubble(raws < 4 && Math.random() < lerp(.3, .5, pr) ? 0 : 1);
+          spawnCd = lerp(1.25, .72, pr);
+        }
+        flowT += dt; oxySum += avg * dt; oxyN += dt;
+        tick += dt;
+        if (tick >= 1) { tick -= 1; score += 2 * mult() * KEYS.filter(k => parts[k].stall <= 0).length; }
+        if (time >= DURATION) end();
+      }
+    }
+    for (const k of KEYS) { const p = parts[k]; if (!p) continue; p.flash = Math.max(0, p.flash - dt * 2.4); p.bad = Math.max(0, p.bad - dt * 2); }
+    // bubbles
+    for (const b of bubbles) {
+      if (b.state === 'in' || b.state === 'back') {
+        const k = Math.min(1, dt * 7); b.x += (b.hx - b.x) * k; b.y += (b.hy - b.y) * k;
+        if (Math.hypot(b.hx - b.x, b.hy - b.y) < 1.5) { b.state = 'idle'; b.t0 = clock; }
+      } else if (b.state === 'idle') {
+        b.x = b.hx + Math.sin(clock * .9 + b.ph) * 4; b.y = b.hy + Math.sin(clock * 1.3 + b.ph * 1.7) * 4;
+      } else if (b.state === 'drag' && grab && grab.b === b) {
+        grab.k = Math.min(1, grab.k + dt * 9);
+        const lift = grab.moved ? grab.lift * grab.k : 0, tx = grab.px + grab.ox * (1 - grab.k), ty = grab.py + grab.oy * (1 - grab.k) - lift;
+        if (grab.moved) { const k = Math.min(1, dt * 30); b.x += (tx - b.x) * k; b.y += (ty - b.y) * k; }
+      } else if (b.state === 'eat') {
+        b.t += dt; const k = Math.min(1, dt * 16); b.x += (b.tx - b.x) * k; b.y += (b.ty - b.y) * k;
+      } else if (b.state === 'pop') b.t += dt;
+    }
+    bubbles = bubbles.filter(b => !(b.state === 'eat' && b.t >= .2) && !(b.state === 'pop' && b.t >= .25));
+    for (const p of pops) p.life -= dt;
+    pops = pops.filter(p => p.life > 0);
+    shake = Math.max(0, shake - dt * 2.6);
+    shown += (score - shown) * Math.min(1, dt * 10); if (Math.abs(score - shown) < 1) shown = score;
+    // heartbeat: quicker when oxygen is low, and the trace flattens when a part has stalled
+    const stalled = parts.brain && KEYS.some(k => parts[k].stall > 0);
+    beat += dt * lerp(1.85, 1.05, avg);
+    ecgAcc += dt * 60;
+    while (ecgAcc >= 1) { ecgAcc -= 1; ecg.push(wave(beat % 1) * (stalled ? .12 : .3 + .7 * avg) + (stalled ? rand(-.04, .04) : 0)); ecg.shift(); }
+  }
+
+  // ---------- input: tap a grey bubble to govern it, drag any bubble onto a part ----------
+  cv.addEventListener('pointerdown', e => {
+    if (!running || grab) return;
+    let best = null, bd = 1e9;
+    for (const b of bubbles) {
+      if (b.state !== 'idle' && b.state !== 'in' && b.state !== 'back') continue;
+      const d = Math.hypot(b.x - e.clientX, b.y - e.clientY);
+      if (d < L.r + 16 && d < bd) { bd = d; best = b; }
+    }
+    if (!best) return;
+    grab = { id: e.pointerId, b: best, sx: e.clientX, sy: e.clientY, px: e.clientX, py: e.clientY, ox: best.x - e.clientX, oy: best.y - e.clientY, moved: false, k: 0, lift: e.pointerType === 'touch' ? L.r * 1.25 : 0 };
+    best.state = 'drag';
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!grab || e.pointerId !== grab.id) return;
+    grab.px = e.clientX; grab.py = e.clientY;
+    if (!grab.moved && Math.hypot(grab.px - grab.sx, grab.py - grab.sy) > 9) grab.moved = true;
+  });
+  function release(e, cancel) {
+    if (!grab || e.pointerId !== grab.id) return;
+    const b = grab.b, moved = grab.moved;
+    grab = null;
+    if (!running || cancel) { b.state = 'back'; return; }
+    if (!moved) { // a tap
+      b.state = 'back';
+      if (!b.kind) govern(b);
+      else if (taught < 2) pop(b.x, b.y - L.r - 12, 'Drag it onto a part', 13, 'rgba(255,238,242,.9)', 1);
+      return;
+    }
+    const g = nearest(b.x, b.y);
+    if (g) feed(b, g); else b.state = 'back';
+  }
+  cv.addEventListener('pointerup', e => release(e, false));
+  cv.addEventListener('pointercancel', e => release(e, true));
+
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(.05, (t - last) / 1000); last = t;
+    update(dt); draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- tutorial demos: each frame is drawn from t alone ----------
+  const mk = (b, n, m, o = {}) => ({ brain: { lv: b, stall: 0, flash: 0, bad: 0, surge: 0, ...(o.brain || {}) }, nerve: { lv: n, stall: 0, flash: 0, bad: 0, surge: 0, ...(o.nerve || {}) }, muscle: { lv: m, stall: 0, flash: 0, bad: 0, surge: 0, ...(o.muscle || {}) } });
+  function demoScene(c, w, h, T, st, hotK) {
+    const lay = layout(w, h, true);
+    const v = c.createLinearGradient(0, 0, 0, h); v.addColorStop(0, '#1d0e1c'); v.addColorStop(1, '#100610');
+    c.fillStyle = v; c.fillRect(0, 0, w, h);
+    drawFigure(c, lay.F, st, T, Math.max(0, wave((T * 1.2) % 1)));
+    lay.tg.forEach(g => drawNode(c, g, st[g.k], T, hotK === g.k));
+    drawLabels(c, lay, lay.F.S < 190);
+    return lay;
+  }
+  const flashAt = a => a >= 0 && a < .45 ? 1 - a / .45 : 0;
+  function demoPop(c, x, y, a, text, size, color, max = 1.2) {
+    if (a < 0 || a >= max) return;
+    drawPops(c, [{ x, y, text, size, color, life: max - a, max }]);
+  }
+  // A drag from a to b between t0 and t1, with the ghost fingertip.
+  function dragAt(c, lay, kind, a, b, t, t0, t1, T) {
+    const k = BS.ease((t - t0) / (t1 - t0)), x = lerp(a.x, b.x, k), y = lerp(a.y, b.y, k);
+    if (t < t1) { drawBubble(c, x, y, lay.r, kind, T, { scale: t > t0 ? 1.1 : 1 }); }
+    else if (t < t1 + .2) drawBubble(c, b.x, b.y, lay.r, kind, T, kind ? { scale: 1 - (t - t1) / .2 } : { scale: 1 + (t - t1) * 1.6, alpha: 1 - (t - t1) / .2 });
+    if (t > t0 - .5 && t < t1 + .35) BS.drawHand(c, x + lay.r * .2, y + lay.r * .5, t >= t0 - .1 && t < t1, '#ffeef2');
+  }
+
+  function demoNeeds(c, w, h, T) {
+    const t = T % 5, k = t / 5;
+    demoScene(c, w, h, T, mk(lerp(.92, .2, k), lerp(.75, .42, k), lerp(.85, .5, k), { brain: { surge: t > 2 ? 1 : 0 } }));
+  }
+  function demoFeed(c, w, h, T) {
+    const t = T % 4.2, t0 = .9, t1 = 2, a = t - t1;
+    const lv = a < 0 ? .2 : Math.min(.2 + FEED, .2 + FEED * BS.ease(a / .3));
+    const lay = demoScene(c, w, h, T, mk(lv, .7, .62, { brain: { flash: flashAt(a) } }), t > t0 && a < 0 ? 'brain' : null);
+    dragAt(c, lay, 1, lay.slots[0], lay.tg[0], t, t0, t1, T);
+    demoPop(c, w * .8, h * .42, a, 'Just in time', 14, ROSE);
+  }
+  function demoGovern(c, w, h, T) {
+    const t = T % 5.2, tap = 1.2, t0 = 2.3, t1 = 3.3, a = t - t1, s = layout(w, h, true).slots[0];
+    const lv = a < 0 ? .3 : Math.min(.3 + FEED, .3 + FEED * BS.ease(a / .3));
+    const lay = demoScene(c, w, h, T, mk(.74, lv, .66, { nerve: { flash: flashAt(a) } }), t > t0 && a < 0 ? 'nerve' : null);
+    const kind = clamp((t - tap) / .25, 0, 1);
+    if (t < t0) {
+      drawBubble(c, s.x, s.y, lay.r, kind, T, { ring: t >= tap ? clamp(1 - (t - tap) / .45, 0, 1) : 0 });
+      if (t > .3 && t < tap + .4) BS.drawHand(c, s.x + lay.r * .2, s.y + lay.r * .5, t >= tap - .14 && t < tap + .12, '#ffeef2');
+      demoPop(c, s.x, s.y - lay.r - 12, t - tap, 'Governed', 13, O2, 1);
+    } else dragAt(c, lay, 1, s, lay.tg[1], t, t0, t1, T);
+  }
+  function demoChoke(c, w, h, T) {
+    const t = T % 4.2, t0 = .9, t1 = 2, a = t - t1, g0 = layout(w, h, true).tg[3];
+    const lv = a < 0 ? .62 : Math.max(.62 - CHOKE, .62 - CHOKE * BS.ease(a / .3));
+    const lay = demoScene(c, w, h, T, mk(.7, .66, lv, { muscle: { bad: a >= 0 && a < .5 ? 1 - a / .5 : 0 } }), t > t0 && a < 0 ? 'muscle' : null);
+    dragAt(c, lay, 0, lay.slots[0], g0, t, t0, t1, T);
+    demoPop(c, w * .8, h * .42, a, 'Choked', 14, RED);
+  }
+  function demoStall(c, w, h, T) {
+    const t = T % 5, tS = 1.8, tR = 3.6;
+    const off = t >= tS && t < tR, lv = t < tS ? lerp(.3, 0, t / tS) : t < tR ? 0 : REVIVE;
+    const lay = demoScene(c, w, h, T, mk(lv, .6, .55, { brain: { stall: off ? 1 : 0, flash: flashAt(t - tR) } }));
+    demoPop(c, w * .8, h * .42, t - tS, 'Brain stalled', 14, RED, 1.6);
+    drawLives(c, w - 36, 18, t >= tS ? LIVES - 1 : LIVES, tS, t);
+  }
+
+  const TUTORIAL = [
+    { title: 'Your AI needs oxygen', text: 'The brain is your models, the nervous system is orchestration, the muscles are your agents. Each ring runs down as that part works.', demo: demoNeeds },
+    { title: 'Drag context to a part', text: 'Blue bubbles are governed context: oxygen. Drag one onto whichever part is running low.', demo: demoFeed },
+    { title: 'Govern raw content first', text: 'Grey bubbles are raw, unstructured content. Tap one to govern it and it becomes oxygen.', demo: demoGovern },
+    { title: 'Never feed raw content', text: 'Give a part ungoverned content and it chokes: it loses oxygen instead of gaining it.', demo: demoChoke },
+    { title: 'Don’t let anything stall', text: `A part with an empty ring stalls. Three stalls or ${DURATION} seconds end the round. Keep all three breathing to build your multiplier.`, demo: demoStall },
+  ];
+
+  if (BS.params.has('debug')) window.__dbg = {
+    state: () => ({ parts, bubbles, score, lives, time, fed, governed, stalls }),
+    step: (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); draw(); },
+    set: (k, lv) => { parts[k].lv = lv; },
+    feed: (i, k) => { const b = bubbles[i]; if (b) feed(b, L.tg.find(g => g.k === k)); },
+    govern: i => { const b = bubbles[i]; if (b && !b.kind) govern(b); },
+    layout: () => L,
+  };
+  resize();
+  window.addEventListener('resize', resize);
+  BS.init({
+    id: 'vital-signs',
+    tagline: 'Context is the oxygen of AI. Keep it breathing.',
+    onStart: start,
+    tutorial: TUTORIAL,
+  });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

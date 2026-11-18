@@ -9,8 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* Games page: pick one of three. Phones get a single column of compact cards;
-     wide screens get three tall poster cards side by side. */
+  /* Games page: pick a game. Phones get a single column of compact cards; wide screens get tall poster
+     cards side by side (three across, or all five across from 1280px when there are more than three). */
   :root {
     --ink: #070a13; --fg: #eef1f8; --dim: rgba(238,241,248,.64); --faint: rgba(238,241,248,.42);
     --line: rgba(255,255,255,.11); --glass: rgba(255,255,255,.06); --halo: #8fb0ff; --gold: #f1d48a;
@@ -80,6 +80,14 @@
   .g3 h2 { color: #e6dcff; }
   .g3 .status { background: rgba(217,204,255,.14); color: #e6dcff; }
   .g3 .go { background: linear-gradient(160deg, #f1eaff, #b7a2f4); color: #1d1640; }
+  .g4 { background: radial-gradient(300px 220px at 82% 28%, #14503e, #0a2a22 60%, #06150f); }
+  .g4 h2 { color: #b6f7d6; }
+  .g4 .status { background: rgba(125,240,184,.14); color: #b6f7d6; }
+  .g4 .go { background: linear-gradient(160deg, #c9fbe2, #5fd6a0); color: #04251a; }
+  .g5 { background: radial-gradient(320px 240px at 80% 26%, #5a1f3d, #2c1024 60%, #1a0a16); }
+  .g5 h2 { color: #ffc4d0; }
+  .g5 .status { background: rgba(255,157,178,.14); color: #ffc4d0; }
+  .g5 .go { background: linear-gradient(160deg, #ffe0e7, #ff8fa8); color: #2a0a16; }
 
   /* Card art motion */
   .thread { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 6.5s linear infinite; }
@@ -98,13 +106,23 @@
   .slash { stroke-dasharray: .42 2; stroke-dashoffset: .42; animation: slash 4.2s cubic-bezier(.6,0,.2,1) infinite; }
   @keyframes slash { 0%, 30% { stroke-dashoffset: .42; } 62%, 100% { stroke-dashoffset: -1.05; } }
   .shine { animation: shine 4.2s ease-in-out infinite; }
+  .slide { animation: slide 3.4s ease-in-out infinite alternate; }
+  @keyframes slide { from { transform: translateX(-46px); } to { transform: translateX(40px); } }
+  .sig { animation: sig 1.2s linear infinite; }
+  @keyframes sig { to { stroke-dashoffset: -14; } }
+  .beat { transform-box: fill-box; transform-origin: center; animation: beat 1s ease-in-out infinite; }
+  @keyframes beat { 0%, 30%, 100% { transform: scale(1); } 12% { transform: scale(1.5); } }
+  .rise { animation: bob 4.4s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+  .rise.b { animation-duration: 5.6s; animation-delay: -2s; }
+  .ecg { stroke-dasharray: 1; animation: ecg 3s linear infinite; }
+  @keyframes ecg { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
   @keyframes shine { 0%, 100% { opacity: .15; } 50% { opacity: .75; } }
 
   .note { font-size: 12px; line-height: 1.6; color: var(--faint); text-align: center; margin: 22px 0 0; }
 
   @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
   .wrap > .top, .wrap > .who, .headrow, #games > *, .note { animation: rise .7s cubic-bezier(.2,.8,.2,1) backwards; }
-  .headrow { animation-delay: .06s; } #games > :nth-child(1) { animation-delay: .14s; } #games > :nth-child(2) { animation-delay: .22s; } #games > :nth-child(3) { animation-delay: .3s; } .note { animation-delay: .4s; }
+  .headrow { animation-delay: .06s; } #games > :nth-child(1) { animation-delay: .14s; } #games > :nth-child(2) { animation-delay: .22s; } #games > :nth-child(3) { animation-delay: .3s; } #games > :nth-child(4) { animation-delay: .38s; } #games > :nth-child(5) { animation-delay: .46s; } .note { animation-delay: .5s; }
 
   /* Wide screens: three tall poster cards. */
   @media (min-width: 980px) {
@@ -130,6 +148,17 @@
     .go { width: 100%; height: 56px; border-radius: 18px; gap: 10px; font-size: 16.5px; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), inset 0 -2px 0 rgba(0,0,0,.12); }
     .go b { display: inline; font-weight: 700; }
     .note { margin-top: 20px; }
+  }
+  /* More than three games: all of them across on a wide enough screen, with slimmer type. */
+  @media (min-width: 1280px) {
+    .wrap.many { max-width: 1640px; }
+    .many #games { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 16px; }
+    .many .game .t { padding: 0 22px; }
+    .many .game h2 { font-size: clamp(30px, 2.5vw, 40px); }
+    .many .game p { font-size: 14.5px; }
+    .many .foot { padding: 18px 22px 24px; }
+    .many .go { font-size: 15px; height: 52px; }
+    .many .status { font-size: 12px; white-space: nowrap; }
   }
   @media (min-width: 980px) and (max-height: 860px) {
     .game .art, .g2 .art { width: auto; height: 34vh; margin: 0 auto; }
@@ -166,7 +195,7 @@
         <circle cx="92" cy="160" r="7.5" fill="#0c1a3e" stroke-opacity=".45"/><circle cx="186" cy="24" r="7.5" fill="#0c1a3e" stroke-opacity=".45"/>
       </g>
     </svg>
-    <div class="t"><h2>Golden Thread</h2><p>Connect scattered content into one answer. Keep clear of the blind spots.</p></div>
+    <div class="t"><h2>Golden Thread</h2><p>Connect scattered, unstructured content into one answer. Keep clear of the blind spots.</p></div>
     <div class="foot"><span class="status" data-game="golden-thread"></span><span class="go"><b></b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div>
   </a>
   <a class="game g2" href="deep-dive.html">
@@ -190,7 +219,7 @@
       <rect x="-200" width="400" height="188" fill="url(#fade2)"/>
       <text x="186" y="30" text-anchor="end" font-family="Inter, sans-serif" font-size="13" font-weight="500" fill="#bff1ff" fill-opacity=".55">↓ 6,200 m</text>
     </svg>
-    <div class="t"><h2>Deep Dive</h2><p>Most of what your company knows sits below the surface. How deep can your AI see?</p></div>
+    <div class="t"><h2>Deep Dive</h2><p>Most of what your company knows sits below the surface. Context is your AI’s oxygen: how deep can it go?</p></div>
     <div class="foot"><span class="status" data-game="deep-dive"></span><span class="go"><b></b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div>
   </a>
   <a class="game g3" href="clear-cut.html">
@@ -208,13 +237,53 @@
       <g transform="translate(70 -118)"><circle cx="100" cy="150" r="17" fill="url(#seal)" stroke="#a87a22"/><circle cx="100" cy="150" r="12" fill="none" stroke="#8a611a" stroke-opacity=".5"/><path d="M94.5 150l4 4L106 146.5" fill="none" stroke="#6b4a10" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle class="shine" cx="94" cy="143" r="4.5" fill="#fff"/></g>
       <path class="slash" pathLength="1" d="M34 132 L204 34" fill="none" stroke="url(#pr)" stroke-width="5" stroke-linecap="round"/>
     </svg>
-    <div class="t"><h2>Clear Cut</h2><p>Cut through the barriers between your AI and your information. Never cut governance.</p></div>
+    <div class="t"><h2>Clear Cut</h2><p>Cut through the barriers between your AI and your content. Never cut governance.</p></div>
     <div class="foot"><span class="status" data-game="clear-cut"></span><span class="go"><b></b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div>
+  </a>
+  <a class="game g4" href="stack-up.html">
+    <svg class="art" viewBox="0 0 200 188" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <defs><radialGradient id="sg"><stop offset="0" stop-color="#5fe0a8" stop-opacity=".3"/><stop offset="1" stop-color="#5fe0a8" stop-opacity="0"/></radialGradient></defs>
+      <circle cx="120" cy="110" r="96" fill="url(#sg)"/>
+      <g stroke="#9cc0ff" stroke-opacity=".5" stroke-dasharray="2 4"><line x1="64" y1="106" x2="64" y2="30"/><line x1="176" y1="106" x2="176" y2="30"/></g>
+      <path d="M44 172l10 -7h146l-10 7z" fill="#7df0b8" fill-opacity=".22"/><rect x="44" y="172" width="146" height="6" fill="#7df0b8" fill-opacity=".12"/>
+      <g><path d="M182 150l8 -5.6v22l-8 5.6z" fill="#163d33"/><path d="M58 150l8 -5.6h124l-8 5.6z" fill="#4f9c82"/><rect x="58" y="150" width="124" height="22" fill="#1f5446"/><rect x="58" y="150" width="124" height="1" fill="#fff" fill-opacity=".45"/></g><g><path d="M182 128l8 -5.6v22l-8 5.6z" fill="#18433a"/><path d="M58 128l8 -5.6h124l-8 5.6z" fill="#56a68b"/><rect x="58" y="128" width="124" height="22" fill="#235c4c"/><rect x="58" y="128" width="124" height="1" fill="#fff" fill-opacity=".45"/></g><g><path d="M176 106l8 -5.6v22l-8 5.6z" fill="#123fae"/><path d="M64 106l8 -5.6h112l-8 5.6z" fill="#9cc0ff"/><rect x="64" y="106" width="112" height="22" fill="#1b55de"/><rect x="64" y="106" width="112" height="1" fill="#fff" fill-opacity=".45"/></g><g><path d="M174 84l8 -5.6v22l-8 5.6z" fill="#1c4a40"/><path d="M70 84l8 -5.6h104l-8 5.6z" fill="#60b397"/><rect x="70" y="84" width="104" height="22" fill="#296756"/><rect x="70" y="84" width="104" height="1" fill="#fff" fill-opacity=".45"/></g><g><path d="M168 62l8 -5.6v22l-8 5.6z" fill="#1f5046"/><path d="M70 62l8 -5.6h98l-8 5.6z" fill="#68bfa1"/><rect x="70" y="62" width="98" height="22" fill="#2d705e"/><rect x="70" y="62" width="98" height="1" fill="#fff" fill-opacity=".45"/></g>
+      <g class="slide"><path d="M168 36l8 -5.6v22l-8 5.6z" fill="#22574b"/><path d="M70 36l8 -5.6h98l-8 5.6z" fill="#72caab"/><rect x="70" y="36" width="98" height="22" fill="#317a66"/><rect x="70" y="36" width="98" height="1" fill="#fff" fill-opacity=".45"/></g>
+    </svg>
+    <div class="t"><h2>Stack Up</h2><p>Build the six layers of your AI stack. Each one is only as wide as the layer beneath it.</p></div>
+    <div class="foot"><span class="status" data-game="stack-up"></span><span class="go"><b></b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div>
+  </a>
+  <a class="game g5" href="vital-signs.html">
+    <svg class="art" viewBox="0 0 200 188" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <defs>
+        <radialGradient id="vg"><stop offset="0" stop-color="#ff7da0" stop-opacity=".34"/><stop offset="1" stop-color="#ff7da0" stop-opacity="0"/></radialGradient>
+        <radialGradient id="o2" cx=".35" cy=".3"><stop offset="0" stop-color="#f4fdff"/><stop offset=".5" stop-color="#8fe0ff"/><stop offset="1" stop-color="#2f9bd8"/></radialGradient>
+        <linearGradient id="vf" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" stop-color="#1a0a16" stop-opacity="0"/><stop offset="1" stop-color="#1a0a16"/></linearGradient>
+      </defs>
+      <circle cx="124" cy="92" r="92" fill="url(#vg)"/>
+      <path d="M84 84q20 -8 40 -6q20 -2 40 6q-8 34 -13 52q-2 20 2 40h-58q4 -20 2 -40q-5 -18 -13 -52z" fill="#ffaabe" fill-opacity=".1" stroke="#ffc8d6" stroke-opacity=".28"/>
+      <g fill="none" stroke="#ffdce4" stroke-opacity=".34" stroke-width="1.6" stroke-linecap="round"><path d="M124 66v104M84 84l40 -3l40 3M84 84l-11 42l6 38M164 84l11 42l-6 38M124 92q-24 -2 -24 8M124 92q24 -2 24 8M124 104q-22 -2 -22 8M124 104q22 -2 22 8"/></g>
+      <g fill="none" stroke="#ffecb4" stroke-width="1.3" stroke-dasharray="3 4" class="sig"><path d="M124 122v-56M124 94l-38 -7l-12 38M124 94l38 -7l12 38M124 122v46"/></g>
+      <g stroke-width="9" stroke="#ff8caa" stroke-opacity=".5" stroke-linecap="round"><path d="M83 90l-8 30M165 90l8 30"/></g>
+      <circle class="beat" cx="113" cy="98" r="5" fill="#ff7d99"/>
+      <g fill="#180914" fill-opacity=".8" stroke-width="3.2" stroke-linecap="round">
+        <circle cx="124" cy="44" r="19" stroke="#ffe6ec" stroke-opacity=".2"/><path d="M124 25a19 19 0 1 1 -18.5 14.6" fill="none" stroke="#ffe3ea"/>
+        <circle cx="124" cy="124" r="13" stroke="#ffe6ec" stroke-opacity=".2"/><path d="M124 111a13 13 0 0 1 0 26" fill="none" stroke="#ffc46b"/>
+        <circle cx="77" cy="106" r="11" stroke="#ffe6ec" stroke-opacity=".2"/><path d="M77 95a11 11 0 1 1 -11 11" fill="none" stroke="#ffe3ea"/>
+        <circle cx="171" cy="106" r="11" stroke="#ffe6ec" stroke-opacity=".2"/><path d="M171 95a11 11 0 1 1 -11 11" fill="none" stroke="#ffe3ea"/>
+      </g>
+      <g fill="none" stroke="#ffd6e2" stroke-opacity=".8" stroke-width="1.4" stroke-linecap="round"><path d="M114 38q5 -5 10 0t10 0M114 45q5 -5 10 0t10 0M116 52q4 -4 8 0t8 0"/></g>
+      <rect width="200" height="188" fill="url(#vf)"/>
+      <g class="rise"><circle cx="42" cy="150" r="13" fill="url(#o2)" stroke="#fff" stroke-opacity=".8"/><text x="40" y="154.500" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="700" fill="#0b3550">O</text><text x="47.500" y="157" text-anchor="middle" font-family="Inter, sans-serif" font-size="6.500" font-weight="700" fill="#0b3550">2</text></g>
+      <g class="rise b"><circle cx="24" cy="98" r="9" fill="url(#o2)" stroke="#fff" stroke-opacity=".8"/></g>
+      <polyline class="ecg" pathLength="1" points="0,24 30,24 36,21 42,24 50,24 54,27 60,6 66,31 71,24 84,24 92,19 100,24 200,24" fill="none" stroke="#ff9db2" stroke-width="1.6" stroke-linejoin="round" stroke-opacity=".85"/>
+    </svg>
+    <div class="t"><h2>Vital Signs</h2><p>Context is the oxygen of AI. Keep the brain, nerves and muscles breathing.</p></div>
+    <div class="foot"><span class="status" data-game="vital-signs"></span><span class="go"><b></b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div>
   </a>
   </div>
   <p class="note">Prototype: scores are saved on this device only for now.</p>
 </div>
-<script src="shared/common.js?v=14"></script>
+<script src="shared/common.js?v=15"></script>
 <script>
   if (!BS.hasPlayer()) location.replace('index.html');
   document.getElementById('logos').innerHTML = BS.LOGOS;
@@ -236,6 +305,9 @@
     if (rank) st.innerHTML = `<span>Your overall standing</span><b>#${rank} of ${all.length} · ${BS.fmt(all[rank - 1].score)} pts →</b>`;
   }
   document.querySelectorAll('.notme').forEach(b => { b.onclick = () => { BS.clearPlayer(); location.href = 'index.html'; }; });
+  const cards = document.querySelectorAll('#games .game').length;
+  document.querySelector('.wrap').classList.toggle('many', cards > 3);
+  document.getElementById('games').style.setProperty('--n', cards);
   render();
   window.addEventListener('pageshow', render);
 </script>

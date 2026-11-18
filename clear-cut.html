@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=14">
+<link rel="stylesheet" href="shared/common.css?v=15">
 <style>
   :root {
     --bg: #eef2f9; --fg: #1d2540; --accent: #2b3a8f; --on-accent: #ffffff;
@@ -22,7 +22,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/common.js?v=14"></script>
+<script src="shared/common.js?v=15"></script>
 <script>
 (() => {
   const cv = document.getElementById('c');
@@ -284,7 +284,7 @@
   function takeaway() {
     const times = n => n === 1 ? 'once' : n === 2 ? 'twice' : n === 3 ? 'three times' : `${n} times`;
     const what = cleared ? `${BS.pl(cleared, 'barrier')} cleared` : 'No barriers cleared';
-    if (lives <= 0) return `${what}, and three governance breaches ended the round.`;
+    if (lives <= 0) return `${what}, and three governance breaches ended the round. Ungoverned AI costs more than it saves.`;
     if (breaches) return `${what}, ${cleared ? 'but' : 'and'} governance was breached ${times(breaches)}.`;
     if (!cleared) return 'No barriers cleared, so your AI is still looking at frosted glass.';
     if (approved) return `${what}, ${BS.pl(approved, 'seal')} approved and governance intact.`;
@@ -1245,8 +1245,8 @@
   const TUTORIAL = [
     { title: 'Swipe to cut', text: 'Swipe through a frosted pane to shatter it. Each one is a barrier: a silo, a legacy app, hidden or scattered data.', demo: demoCut },
     { title: 'Cut several at once', text: 'Cut through several panes in one swipe for a combo bonus.', demo: demoCombo },
-    { title: 'Tap the gold seals', text: 'Gold seals are governance: security, privacy and compliance. Tap one to approve it.', demo: demoTap },
-    { title: 'Never cut a seal', text: `Swiping through a seal is a governance breach. Three breaches and your round ends. Rounds last ${DURATION} seconds.`, demo: demoBreach },
+    { title: 'Tap the gold seals', text: 'Gold seals are the governed, secure layer: security, privacy and compliance. Tap one to approve it.', demo: demoTap },
+    { title: 'Never cut a seal', text: `Swiping through a seal is a governance breach, the hidden cost of ungoverned AI. Three breaches and your round ends. Rounds last ${DURATION} seconds.`, demo: demoBreach },
   ];
 
   if (BS.params.has('debug')) window.__dbg = { items: () => items, score: () => score, lives: () => lives, step: (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); draw(); } };
@@ -1254,7 +1254,7 @@
   window.addEventListener('resize', resize);
   BS.init({
     id: 'clear-cut',
-    tagline: 'Shatter the barriers between your AI and your information.',
+    tagline: 'Shatter the barriers between your AI and your content. Keep it governed.',
     onStart: start,
     tutorial: TUTORIAL,
   });

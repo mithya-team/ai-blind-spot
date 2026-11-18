@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Stack Up</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/common.css?v=15">
+<style>
+  :root {
+    --bg: #05130f; --fg: #eafff5; --accent: #7df0b8; --on-accent: #04251a;
+    --card: rgba(6, 26, 20, .86); --line: rgba(125, 240, 184, .22); --chip: rgba(125, 240, 184, .07);
+    --input: rgba(255, 255, 255, .05); --scrim: rgba(2, 10, 8, .45); --shadow: 0 24px 70px rgba(0, 0, 0, .6);
+    --font-display: Inter, -apple-system, sans-serif; --display-weight: 700; --font-ui: Inter, -apple-system, sans-serif;
+    --display-tracking: -.025em; --demo-bg: #071d17;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="shared/common.js?v=15"></script>
+<script>
+/* Stack Up: build the six layers of the enterprise AI stack, bottom to top.
+   A layer slides across; tap to drop it. Whatever overhangs the layer below is cut away,
+   so every layer can only be as wide as the one beneath it. That rule is the message:
+   models, orchestration and agents can only be as strong as the context they stand on.
+   Slabs are stored in "stack units": u = left edge measured from the centre line, ww = width,
+   both as a fraction of the full base width. That keeps a round intact when the window resizes. */
+(() => {
+  const cv = document.getElementById('c');
+  const DURATION = +(BS.params.get('t') || 90), LIVES = 3, N = 6, TOL = .035;
+  const FONT = 'Inter, -apple-system, sans-serif', INK = '#eafff5', MINT = '#7df0b8', BLUE = '#8db8ff';
+  // Bottom to top. n = name on the slab, s = short name for narrow slabs, b = the body-part analogy.
+  const LAYERS = [
+    { n: 'Infrastructure', s: 'Infrastructure', b: 'Skeleton' },
+    { n: 'Systems of Record', s: 'Systems of Record', b: 'Vital organs' },
+    { n: 'Context & Connected Data', s: 'Context', b: 'Oxygen', key: true },
+    { n: 'Language Models', s: 'Models', b: 'Brain' },
+    { n: 'Orchestration', s: 'Orchestration', b: 'Nervous system' },
+    { n: 'Application & Agents', s: 'Agents', b: 'Muscles' },
+  ];
+  const PAL = LAYERS.map((L, i) => {
+    if (L.key) return { f0: '#4a8dff', f1: '#1b55de', top: '#9cc0ff', side: '#123fae', edge: 'rgba(225,237,255,.9)', glow: '70,130,255' };
+    const l = 21 + i * 2.4;
+    return { f0: `hsl(160 36% ${l + 9}%)`, f1: `hsl(163 40% ${l}%)`, top: `hsl(157 42% ${l + 21}%)`, side: `hsl(165 42% ${l - 7}%)`, edge: 'rgba(200,255,232,.5)', glow: '125,240,184' };
+  });
+  const BASE = { u: -.5, ww: 1 };
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const TRK = new Map();
+  const trk = s => { let v = TRK.get(s); if (!v) TRK.set(s, v = s.toUpperCase().split('').join(' ')); return v; };
+  const rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  let RM = !!(rmq && rmq.matches);
+  if (rmq && rmq.addEventListener) rmq.addEventListener('change', e => { RM = e.matches; });
+
+  let ctx, W, H, G, bg = null;
+  let stack = [], cur = null, pieces = [], pops = [];
+  let running = false, over = false, time = 0, clock = 0, score = 0, shown = 0, lives = LIVES;
+  let stackNo = 0, stacks = 0, perfect = 0, run = 0, collapses = 0, ctxW = [], topW = [];
+  let phase = 'play', pt = 0, shake = 0, warnSec = 0, drops = 0, side = 1, born = 0, ctxAt = -9, lifeAt = -9, hintY = 0;
+
+  // ---------- geometry ----------
+  function geom(w, h, demo) {
+    const baseY = demo ? h - 20 : h - clamp(h * .13, 86, 118);
+    const sh = demo ? clamp((baseY - 54) / 6.3, 16, 54) : clamp((baseY - 150) / 7.3, 34, 72);
+    const bw = demo ? clamp(w * .46, 110, 270) : clamp(w * .6, 190, 400);
+    return { w, h, cx: w / 2, baseY, sh, bw, d: sh * .3, side: !demo && (w - bw) / 2 > 250 };
+  }
+  const X = (g, u) => g.cx + u * g.bw;
+  const Y = (g, i) => g.baseY - (i + 1) * g.sh;
+  const amp = (g, ww) => clamp(g.w / (2 * g.bw) - .05 * ww, .6, .95);
+  const speed = (no, level) => 1.05 + .12 * Math.min(no, 9) + .02 * level;
+
+  function resize() {
+    ({ ctx, w: W, h: H } = BS.fit(cv));
+    G = geom(W, H);
+    bg = document.createElement('canvas');
+    const d = Math.min(2, window.devicePixelRatio || 1);
+    bg.width = Math.round(W * d); bg.height = Math.round(H * d);
+    const b = bg.getContext('2d'); b.setTransform(d, 0, 0, d, 0, 0);
+    paintBg(b, W, H, G);
+    placeHint();
+  }
+  function placeHint() {
+    const r = BS.pill && BS.pill.getBoundingClientRect();
+    hintY = Math.min(H - 56, r && r.height > 16 ? r.top - 16 : H);
+  }
+
+  // ---------- drawing ----------
+  function paintBg(c, w, h, g) {
+    const v = c.createLinearGradient(0, 0, 0, h);
+    v.addColorStop(0, '#04100d'); v.addColorStop(.55, '#07201a'); v.addColorStop(1, '#030b09');
+    c.fillStyle = v; c.fillRect(0, 0, w, h);
+    const r = Math.max(w, h) * .62, glow = c.createRadialGradient(g.cx, g.baseY - g.sh * 3, 0, g.cx, g.baseY - g.sh * 3, r);
+    glow.addColorStop(0, 'rgba(60,170,130,.3)'); glow.addColorStop(.5, 'rgba(40,120,100,.1)'); glow.addColorStop(1, 'rgba(40,120,100,0)');
+    c.fillStyle = glow; c.fillRect(0, 0, w, h);
+    // faint blueprint grid, strongest around the build site
+    c.strokeStyle = 'rgba(160,255,215,.045)'; c.lineWidth = 1;
+    const step = 44, x0 = g.cx % step;
+    c.beginPath();
+    for (let x = x0; x < w; x += step) { c.moveTo(x + .5, 0); c.lineTo(x + .5, h); }
+    for (let y = g.baseY % step; y < h; y += step) { c.moveTo(0, y + .5); c.lineTo(w, y + .5); }
+    c.stroke();
+    let s = 7;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    for (let i = 0; i < 70; i++) { c.fillStyle = `rgba(210,255,235,${.08 + rnd() * .22})`; c.beginPath(); c.arc(rnd() * w, rnd() * h, .5 + rnd() * .9, 0, 7); c.fill(); }
+  }
+
+  function slabLabel(c, g, x, y, w, i) {
+    const L = LAYERS[i], sh = g.sh, pad = 9;
+    if (w < 30) return;
+    let fs = clamp(sh * .27, 8.5, 17), name = L.n;
+    c.font = `700 ${fs}px ${FONT}`;
+    if (c.measureText(name).width > w - pad * 2) name = L.s;
+    const tw = c.measureText(name).width;
+    if (tw > w - pad * 2) { fs = fs * (w - pad * 2) / tw; if (fs < 7) return; c.font = `700 ${fs}px ${FONT}`; }
+    const two = !g.side && sh >= 30 && w > 78;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = L.key ? '#fff' : INK;
+    c.fillText(name, x + w / 2, y + sh * (two ? .4 : .53));
+    if (two) {
+      c.font = `600 ${clamp(fs * .62, 7, 10.5)}px ${FONT}`;
+      c.fillStyle = L.key ? 'rgba(255,255,255,.8)' : 'rgba(234,255,245,.55)';
+      c.fillText(trk(L.b), x + w / 2, y + sh * .72);
+    }
+  }
+
+  // One slab: oblique top and side faces, then the front face with its label. (x, y) is the front face's top-left.
+  function drawSlab(c, g, x, y, w, i, o = {}) {
+    if (w < .5) return;
+    const P = PAL[i], sh = g.sh, dx = g.d, dy = g.d * .7;
+    c.save();
+    if (o.alpha != null) c.globalAlpha *= o.alpha;
+    if (o.rot) { c.translate(x + w / 2, y + sh / 2); c.rotate(o.rot); c.translate(-(x + w / 2), -(y + sh / 2)); }
+    if (LAYERS[i].key && !o.plain) { c.shadowColor = `rgba(${P.glow},.8)`; c.shadowBlur = sh * .55; }
+    c.fillStyle = P.side;
+    c.beginPath(); c.moveTo(x + w, y); c.lineTo(x + w + dx, y - dy); c.lineTo(x + w + dx, y + sh - dy); c.lineTo(x + w, y + sh); c.closePath(); c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = P.top;
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x + dx, y - dy); c.lineTo(x + w + dx, y - dy); c.lineTo(x + w, y); c.closePath(); c.fill();
+    const f = c.createLinearGradient(0, y, 0, y + sh); f.addColorStop(0, P.f0); f.addColorStop(1, P.f1);
+    c.fillStyle = f; c.fillRect(x, y, w, sh);
+    c.fillStyle = P.edge; c.fillRect(x, y, w, 1.2);
+    c.fillStyle = 'rgba(0,0,0,.2)'; c.fillRect(x, y + sh - 2, w, 2);
+    if (o.lit > 0) {
+      c.fillStyle = `rgba(255,255,255,${.55 * o.lit})`;
+      c.fillRect(x, y, w, sh);
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + dx, y - dy); c.lineTo(x + w + dx, y - dy); c.lineTo(x + w, y); c.closePath(); c.fill();
+    }
+    if (!o.bare) slabLabel(c, g, x, y, w, i);
+    c.restore();
+  }
+
+  function drawPlinth(c, g, a = 1) {
+    const w = g.bw + 30, x = g.cx - w / 2, y = g.baseY, dx = g.d, dy = g.d * .7, t = 11;
+    c.save(); c.globalAlpha *= a;
+    const sh = c.createRadialGradient(g.cx, y + t + 8, 0, g.cx, y + t + 8, w * .7);
+    sh.addColorStop(0, 'rgba(0,0,0,.5)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    c.save(); c.translate(0, y + t + 8); c.scale(1, .16); c.translate(0, -(y + t + 8)); c.fillStyle = sh; c.fillRect(x - w, y - w, w * 3, w * 3); c.restore();
+    c.fillStyle = 'rgba(125,240,184,.2)';
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x + dx, y - dy); c.lineTo(x + w + dx, y - dy); c.lineTo(x + w, y); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(125,240,184,.1)'; c.fillRect(x, y, w, t);
+    c.beginPath(); c.moveTo(x + w, y); c.lineTo(x + w + dx, y - dy); c.lineTo(x + w + dx, y + t - dy); c.lineTo(x + w, y + t); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(200,255,232,.5)'; c.fillRect(x, y, w, 1);
+    c.restore();
+  }
+
+  // Dashed lines rising from the context slab's edges: nothing above can be wider than this.
+  function drawGuides(c, g, s, a) {
+    if (a <= 0) return;
+    const x0 = X(g, s.u), x1 = X(g, s.u + s.ww), y0 = Y(g, 2), y1 = Y(g, N - 1) - g.sh * .2;
+    c.save(); c.globalAlpha *= a; c.strokeStyle = 'rgba(141,184,255,.7)'; c.lineWidth = 1.2; c.setLineDash([3, 5]);
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0, y1); c.moveTo(x1, y0); c.lineTo(x1, y1); c.stroke();
+    c.restore();
+  }
+
+  // Wide screens: the body-part analogy sits beside each level, like the callouts on the slide.
+  function drawCallouts(c, g, placed, curLevel) {
+    c.save(); c.textBaseline = 'middle';
+    const xr = g.cx + g.bw / 2 + g.d + 34, xl = g.cx - g.bw / 2 - 34;
+    for (let i = 0; i < N; i++) {
+      const y = Y(g, i) + g.sh / 2, on = i < placed, now = i === curLevel, L = LAYERS[i];
+      const a = on ? .9 : now ? .7 : .28;
+      c.strokeStyle = `rgba(200,255,232,${a * .35})`; c.lineWidth = 1; c.setLineDash([2, 4]);
+      c.beginPath(); c.moveTo(xr - 22, y); c.lineTo(xr - 4, y); c.moveTo(xl + 4, y); c.lineTo(xl + 22, y); c.stroke();
+      c.setLineDash([]);
+      c.textAlign = 'left'; c.font = `600 15px ${FONT}`; c.fillStyle = L.key ? `rgba(165,200,255,${a})` : `rgba(234,255,245,${a})`;
+      c.fillText(L.b, xr + 4, y);
+      c.textAlign = 'right'; c.font = `600 10.5px ${FONT}`; c.fillStyle = `rgba(234,255,245,${a * .6})`;
+      c.fillText(trk('Layer ' + (i + 1)), xl - 4, y);
+    }
+    c.restore();
+  }
+
+  function drawPops(c, list) {
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const p of list) {
+      const k = p.life / p.max, up = (1 - k) * 34;
+      c.globalAlpha = clamp(k * 2.4, 0, 1) * clamp((1 - k) * 8, 0, 1);
+      c.font = `700 ${p.size}px ${FONT}`;
+      c.lineWidth = 4; c.strokeStyle = 'rgba(3,14,11,.7)'; c.strokeText(p.text, p.x, p.y - up);
+      c.fillStyle = p.color; c.fillText(p.text, p.x, p.y - up);
+    }
+    c.globalAlpha = 1;
+  }
+
+  function drawLives(c, x, y, n, lostAt) {
+    for (let i = 0; i < LIVES; i++) {
+      const on = i < n, bx = x + (i - (LIVES - 1) / 2) * 17, k = !on && i === n ? clamp((clock - lostAt) * 2.5, 0, 1) : 1;
+      c.fillStyle = on ? MINT : `rgba(255,120,110,${.9 - .6 * k})`;
+      c.globalAlpha = on ? 1 : .9;
+      BS.rr(c, bx - 6, y - 2.5, 12, 5, 2); c.fill();
+    }
+    c.globalAlpha = 1;
+  }
+
+  function drawHud(c, w) {
+    const top = c.createLinearGradient(0, 0, 0, 118);
+    top.addColorStop(0, 'rgba(3,12,10,.95)'); top.addColorStop(.6, 'rgba(3,12,10,.7)'); top.addColorStop(1, 'rgba(3,12,10,0)');
+    c.fillStyle = top; c.fillRect(0, 0, w, 118);
+    if (!running && !over) return;
+    const left = Math.max(0, DURATION - time), mm = Math.floor(left / 60), ss = String(Math.floor(left % 60)).padStart(2, '0');
+    c.textBaseline = 'alphabetic';
+    c.textAlign = 'left'; c.font = `700 9.5px ${FONT}`; c.fillStyle = 'rgba(234,255,245,.6)'; c.fillText(trk('Score'), 18, 28);
+    c.font = `700 22px ${FONT}`; c.fillStyle = INK; c.fillText(BS.fmt(shown), 18, 52);
+    c.textAlign = 'right'; c.font = `700 9.5px ${FONT}`; c.fillStyle = 'rgba(234,255,245,.6)'; c.fillText(trk('Time'), w - 18, 28);
+    c.font = `700 22px ${FONT}`; c.fillStyle = left <= 5 && running ? '#ff9a8c' : INK; c.fillText(`${mm}:${ss}`, w - 18, 52);
+    c.textAlign = 'center'; c.font = `700 9.5px ${FONT}`; c.fillStyle = 'rgba(234,255,245,.6)'; c.fillText(trk('Stack ' + (stackNo + 1)), w / 2, 28);
+    drawLives(c, w / 2, 44, lives, lifeAt);
+    // time bar
+    c.fillStyle = 'rgba(234,255,245,.1)'; c.fillRect(0, 0, w, 3);
+    c.fillStyle = MINT; c.fillRect(0, 0, w * clamp(1 - time / DURATION, 0, 1), 3);
+  }
+
+  function draw() {
+    const c = ctx, g = G;
+    c.save();
+    if (shake > 0 && !RM) c.translate(rand(-1, 1) * shake * 12, rand(-1, 1) * shake * 12);
+    c.drawImage(bg, 0, 0, W, H);
+    const live = running || over;
+    // the finished stack lights up from the bottom, then sinks away
+    let sink = 0, wave = -9;
+    if (phase === 'done') { wave = pt * 9; sink = pt > 1.1 ? Math.pow((pt - 1.1) / .5, 2) : 0; }
+    const oy = sink * H * .55, alpha = 1 - clamp(sink, 0, 1);
+    drawPlinth(c, g, clamp((clock - born) * 4, 0, 1));
+    if (g.side) drawCallouts(c, g, stack.length, cur && phase === 'play' ? stack.length : -1);
+    c.save(); c.translate(0, oy); c.globalAlpha = alpha;
+    if (stack.length > 2) drawGuides(c, g, stack[2], clamp((clock - ctxAt) * 3, 0, 1) * (phase === 'done' ? clamp(1 - pt * 2, 0, 1) : 1));
+    stack.forEach((s, i) => {
+      const k = clamp((clock - s.t) / .22, 0, 1), sq = (1 - k) * g.sh * .12;
+      const lit = phase === 'done' ? Math.max(0, 1 - Math.abs(wave - i - 1) / 2.2) : (1 - k) * (s.perfect ? .9 : .25);
+      drawSlab(c, g, X(g, s.u), Y(g, i) + sq, s.ww * g.bw, i, { lit });
+    });
+    c.restore();
+    if (cur && phase === 'play') {
+      const i = stack.length, bob = Math.sin(clock * 5) * 1.5 - 5;
+      drawSlab(c, g, X(g, cur.c - cur.ww / 2), Y(g, i) + bob, cur.ww * g.bw, i, { alpha: clamp((clock - cur.born) * 9, 0, 1) });
+    }
+    for (const p of pieces) drawSlab(c, g, p.x, p.y, p.w, p.i, { rot: p.rot, alpha: clamp(p.life * 2.2, 0, 1), plain: true, bare: p.w < 50 });
+    if (live) drawPops(c, pops);
+    c.restore();
+    drawHud(c, W);
+    if (running && drops === 0 && stacks === 0 && collapses === 0) {
+      const a = clamp(time * 2, 0, 1) * (.75 + .25 * Math.sin(clock * 3.2));
+      c.globalAlpha = a; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+      c.font = `700 15px ${FONT}`; c.fillStyle = INK;
+      c.fillText(matchMedia('(pointer: fine)').matches ? 'Click or press space to drop the layer' : 'Tap anywhere to drop the layer', W / 2, hintY - 20);
+      c.font = `500 12.5px ${FONT}`; c.fillStyle = 'rgba(234,255,245,.75)';
+      c.fillText('Line it up with the layer below', W / 2, hintY);
+      c.globalAlpha = 1;
+    }
+  }
+
+  // ---------- play ----------
+  // Feedback sits in two fixed lines just above the tallest the stack can get, clear of the layer names.
+  function pop(slot, text, size, color, life = 1.1) {
+    if (!running) return;
+    pops = pops.filter(p => p.slot !== slot);
+    pops.push({ slot, x: G.cx, y: Math.max(104, Y(G, N - 1) - G.sh * .75 - 62) + slot * 28, text, size, color, life, max: life });
+  }
+  function spawn() {
+    const top = stack.length ? stack[stack.length - 1] : BASE;
+    side = -side;
+    const a = amp(G, top.ww);
+    cur = { ww: top.ww, c: side * a, dir: -side, born: clock, aim: (top.u + top.ww / 2) + rand(-.11, .11) };
+  }
+  function newStack(advance) {
+    if (advance) stackNo++;
+    stack = []; phase = 'play'; pt = 0; born = clock; ctxAt = -9;
+    spawn();
+  }
+  function cutPiece(u, ww, i, dir) {
+    pieces.push({ x: X(G, u), y: Y(G, i), w: ww * G.bw, i, vx: dir * rand(40, 90), vy: -rand(20, 70), rot: 0, vr: dir * rand(1.2, 2.6), life: 1.3 });
+  }
+  function collapse() {
+    collapses++; run = 0; lifeAt = clock; shake = 1;
+    if (running) { lives--; pops = []; BS.sfx('hit'); BS.vibrate([30, 40, 60]); pop(0, 'Stack collapsed', 20, '#ff9a8c', 1.4); }
+    const i = stack.length;
+    cutPiece(cur.c - cur.ww / 2, cur.ww, i, cur.dir || 1);
+    stack.forEach((s, k) => cutPiece(s.u, s.ww, k, k % 2 ? 1 : -1));
+    pieces.forEach(p => { p.vy -= rand(60, 160); p.life = 1.5; });
+    stack = []; cur = null; phase = 'collapse'; pt = 0;
+  }
+  function complete() {
+    const top = stack[N - 1].ww, mult = 1 + .2 * stackNo;
+    const bonus = Math.round(500 * top * mult / 5) * 5;
+    stacks++; topW.push(top); score += running ? bonus : 0;
+    if (running) {
+      BS.sfx('full'); BS.vibrate(40);
+      pop(0, `AI ready at ${Math.round(top * 100)}%`, 21, INK, 1.6);
+      pop(1, `+${BS.fmt(bonus)}`, 17, MINT, 1.6);
+    }
+    cur = null; phase = 'done'; pt = 0;
+  }
+  function drop(auto) {
+    if (!cur || phase !== 'play') return;
+    if (!auto && (!running || clock - cur.born < .12)) return;
+    const prev = stack.length ? stack[stack.length - 1] : BASE, i = stack.length;
+    const cu = cur.c - cur.ww / 2;
+    const l = Math.max(cu, prev.u), r = Math.min(cu + cur.ww, prev.u + prev.ww), ov = r - l;
+    drops++;
+    if (ov <= .004) { collapse(); return; }
+    const off = cu - prev.u, mult = 1 + .2 * stackNo;
+    let placed;
+    if (Math.abs(off) <= TOL) {
+      placed = { u: prev.u, ww: prev.ww, t: clock, perfect: true };
+      run++; perfect++;
+      const bonus = Math.round(25 * Math.min(run, 4) * mult / 5) * 5;
+      if (running) { score += bonus; BS.sfx('approve'); BS.vibrate(12); pop(1, run > 1 ? `Perfect ×${run}  +${bonus}` : `Perfect  +${bonus}`, 17, MINT); }
+    } else {
+      placed = { u: l, ww: ov, t: clock };
+      run = 0;
+      if (off > 0) cutPiece(r, cu + cur.ww - r, i, 1); else cutPiece(cu, l - cu, i, -1);
+      if (running) { BS.sfx('cut'); BS.sfx('link', { n: i }); BS.vibrate(8); }
+    }
+    const pts = Math.round(100 * placed.ww * mult / 5) * 5;
+    if (running) score += pts;
+    stack.push(placed);
+    if (LAYERS[i].key) {
+      ctxAt = clock;
+      if (running) { ctxW.push(placed.ww); pop(0, `Context ${Math.round(placed.ww * 100)}%`, 20, BLUE, 1.7); }
+    }
+    if (!placed.perfect) pop(1, `+${pts}`, 15, 'rgba(234,255,245,.85)');
+    if (stack.length === N) complete(); else spawn();
+  }
+
+  function start() {
+    stack = []; pieces = []; pops = []; cur = null;
+    time = 0; score = 0; shown = 0; lives = LIVES; stackNo = 0; stacks = 0; perfect = 0; run = 0; collapses = 0; ctxW = []; topW = [];
+    drops = 0; warnSec = 0; shake = 0; lifeAt = -9; over = false; running = true; side = 1;
+    placeHint();
+    newStack(false);
+  }
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  function takeaway() {
+    const cw = avg(ctxW);
+    if (cw == null) return 'No stack got as far as its context layer, so there was nothing for the models and agents to stand on.';
+    const pct = Math.round(cw * 100);
+    if (pct >= 90) return `Your context layer averaged ${pct}% of full width, so your models and agents had almost everything to stand on.`;
+    return `Your context layer averaged ${pct}% of full width. Nothing above it, not models, orchestration or agents, could ever be wider than that.`;
+  }
+  function end() {
+    if (over) return;
+    running = false; over = true; cur = null;
+    const cw = avg(ctxW);
+    setTimeout(() => BS.finish({
+      score,
+      headline: lives <= 0 ? 'Stack collapsed' : 'Time',
+      theme: takeaway(),
+      stats: { stacks, context: cw == null ? null : Math.round(cw * 100), perfect, collapses },
+      win: false,
+    }), 900);
+  }
+
+  function update(dt) {
+    clock += dt;
+    if (running) {
+      time += dt;
+      const left = DURATION - time;
+      if (left > 0 && left <= 5 && Math.ceil(left) !== warnSec) { warnSec = Math.ceil(left); BS.sfx('warn'); }
+      if (time >= DURATION) end();
+    }
+    const attract = !running && !over;
+    if (attract && !cur && phase === 'play') newStack(false);
+    if (cur && phase === 'play' && (running || attract)) {
+      const a = amp(G, cur.ww), v = speed(attract ? 0 : stackNo, stack.length) * (attract ? .8 : 1);
+      const before = cur.c;
+      cur.c += cur.dir * v * dt;
+      if (cur.c > a) { cur.c = a; cur.dir = -1; } else if (cur.c < -a) { cur.c = -a; cur.dir = 1; }
+      // behind the intro card the game plays itself, a little imperfectly
+      if (attract && clock - cur.born > .5 && (before - cur.aim) * (cur.c - cur.aim) <= 0) drop(true);
+    }
+    if (phase === 'done') { pt += dt; if (pt >= 1.6 && !over) newStack(running); }
+    else if (phase === 'collapse') { pt += dt; if (pt >= 1.15) { if (running && lives <= 0) end(); else if (!over) newStack(false); } }
+    for (const p of pieces) { p.vy += 900 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.life -= dt; }
+    pieces = pieces.filter(p => p.life > 0 && p.y < H + 200);
+    for (const p of pops) p.life -= dt;
+    pops = pops.filter(p => p.life > 0);
+    shake = Math.max(0, shake - dt * 2.4);
+    shown += (score - shown) * Math.min(1, dt * 10); if (Math.abs(score - shown) < 1) shown = score;
+  }
+
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); drop(false); });
+  window.addEventListener('keydown', e => {
+    if ((e.code === 'Space' || e.code === 'Enter') && running && !e.repeat) { e.preventDefault(); drop(false); }
+  });
+
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(.05, (t - last) / 1000); last = t;
+    update(dt); draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- tutorial demos: each frame is drawn from t alone ----------
+  const tri = (t, a, v, from) => { // centre of a slab sliding at speed v between -a and a, starting at from
+    const span = 4 * a, p = (((from + a) + v * t) % span + span) % span;
+    return p <= 2 * a ? -a + p : 3 * a - p;
+  };
+  function demoBase(c, w, h) {
+    const g = geom(w, h, true);
+    const v = c.createLinearGradient(0, 0, 0, h); v.addColorStop(0, '#061914'); v.addColorStop(1, '#04100d');
+    c.fillStyle = v; c.fillRect(0, 0, w, h);
+    const glow = c.createRadialGradient(g.cx, g.baseY - g.sh * 3, 0, g.cx, g.baseY - g.sh * 3, w * .6);
+    glow.addColorStop(0, 'rgba(60,170,130,.28)'); glow.addColorStop(1, 'rgba(60,170,130,0)');
+    c.fillStyle = glow; c.fillRect(0, 0, w, h);
+    drawPlinth(c, g);
+    return g;
+  }
+  const put = (c, g, i, u, ww, o) => drawSlab(c, g, X(g, u), Y(g, i), ww * g.bw, i, o);
+  function fallPiece(c, g, i, u, ww, a, dir) {
+    if (a < 0 || a > 1.1) return;
+    drawSlab(c, g, X(g, u) + dir * 70 * a, Y(g, i) - 40 * a + 450 * a * a, ww * g.bw, i, { rot: dir * 2.2 * a, alpha: clamp(2.2 - a * 2.2, 0, 1), plain: true, bare: true });
+  }
+  function demoPop(c, x, y, a, text, size, color, max = 1.1) {
+    if (a < 0 || a >= max) return;
+    drawPops(c, [{ x, y, text, size, color, life: max - a, max }]);
+  }
+  function tapHand(c, w, h, t, tapT) {
+    const y = h - 30, x = w * .78;
+    if (t > tapT - .9 && t < tapT + .7) BS.drawHand(c, x, y, t >= tapT - .12 && t < tapT + .14, '#eafff5');
+  }
+
+  function demoDrop(c, w, h, T) {
+    const t = T % 4, g = demoBase(c, w, h), tap = 1.8;
+    put(c, g, 0, -.5, 1); put(c, g, 1, -.5, 1);
+    const cc = t < tap ? lerp(.85, 0, t / tap) : 0, k = clamp((t - tap) / .22, 0, 1);
+    put(c, g, 2, cc - .5, 1, { alpha: clamp(t * 6, 0, 1) * clamp((4 - t) * 4, 0, 1), lit: t >= tap ? (1 - k) * .9 : 0 });
+    demoPop(c, g.cx, Y(g, 2) - 16, t - tap, 'Perfect', 16, MINT);
+    tapHand(c, w, h, t, tap);
+  }
+  function demoCut(c, w, h, T) {
+    const t = T % 5.2, g = demoBase(c, w, h), tap1 = 1.5, tap2 = 3.4, off = .24, fade = clamp((5.2 - t) * 4, 0, 1);
+    put(c, g, 0, -.5, 1);
+    if (t < tap1) put(c, g, 1, lerp(-.9, off, t / tap1) - .5, 1, { alpha: clamp(t * 6, 0, 1) });
+    else {
+      put(c, g, 1, off - .5, 1 - off, { alpha: fade, lit: (1 - clamp((t - tap1) / .22, 0, 1)) * .25 });
+      fallPiece(c, g, 1, .5, off, t - tap1, 1);
+      demoPop(c, X(g, .5 + off / 2), Y(g, 1) - 6, t - tap1, 'cut', 14, '#ff9a8c');
+      const ww = 1 - off, c0 = off - .5 + ww / 2;
+      if (t > tap1 + .5) {
+        const cc = t < tap2 ? lerp(c0 + .8, c0, (t - tap1 - .5) / (tap2 - tap1 - .5)) : c0;
+        put(c, g, 2, cc - ww / 2, ww, { alpha: clamp((t - tap1 - .5) * 6, 0, 1) * fade, lit: t >= tap2 ? (1 - clamp((t - tap2) / .22, 0, 1)) * .9 : 0 });
+      }
+    }
+    tapHand(c, w, h, t, t < tap1 + .6 ? tap1 : tap2);
+  }
+  function demoContext(c, w, h, T) {
+    const t = T % 6, g = demoBase(c, w, h), tap = 1.4, off = -.3, ww = 1 + off, fade = clamp((6 - t) * 4, 0, 1);
+    put(c, g, 0, -.5, 1); put(c, g, 1, -.5, 1);
+    if (t < tap) put(c, g, 2, lerp(.8, off, t / tap) - .5, 1, { alpha: clamp(t * 6, 0, 1) });
+    else {
+      const u = -.5;
+      drawGuides(c, g, { u, ww }, clamp((t - tap) * 3, 0, 1) * fade);
+      put(c, g, 2, u, ww, { alpha: fade, lit: (1 - clamp((t - tap) / .22, 0, 1)) * .3 });
+      fallPiece(c, g, 2, -.5 + off, -off, t - tap, -1);
+      [[3, 0, ww], [4, .05, ww - .05], [5, .05, ww - .09]].forEach(([i, du, w2], k) => {
+        const at = tap + 1 + k * .75, a = t - at;
+        if (a < 0) return;
+        const slide = (1 - BS.ease(a / .45)) * (k % 2 ? -.5 : .5);
+        put(c, g, i, u + du + slide, w2, { alpha: clamp(a * 5, 0, 1) * fade });
+      });
+      demoPop(c, X(g, u + ww / 2), Y(g, 2) - 22, t - tap, `Context ${Math.round(ww * 100)}%`, 16, BLUE, 1.6);
+    }
+    tapHand(c, w, h, t, tap);
+  }
+  function demoFull(c, w, h, T) {
+    const t = T % 5, g = demoBase(c, w, h), fade = clamp((5 - t) * 4, 0, 1);
+    const S = [[-.5, 1], [-.46, .93], [-.46, .88], [-.42, .84], [-.42, .8], [-.4, .76]], wave = (t - .8) * 7;
+    S.forEach(([u, ww], i) => put(c, g, i, u, ww, { alpha: fade, lit: t > .8 ? Math.max(0, 1 - Math.abs(wave - i - 1) / 2.2) : 0 }));
+    demoPop(c, g.cx, Y(g, 5) - g.sh * .2 - 26, t - 1.5, 'AI ready at 76%', 17, INK, 2.2);
+    demoPop(c, g.cx, Y(g, 5) - g.sh * .2 - 4, t - 1.5, '+380', 14, MINT, 2.2);
+    // three collapses allowed
+    const save = clock; clock = 9; drawLives(c, w - 38, 20, LIVES, -9); clock = save;
+  }
+
+  const TUTORIAL = [
+    { title: 'Tap to drop', text: 'A layer of your AI stack slides across. Tap anywhere to drop it onto the one below. Line it up exactly for a perfect drop.', demo: demoDrop },
+    { title: 'Overhang is cut away', text: 'Whatever hangs over the edge is lost. Every layer can only be as wide as the one beneath it.', demo: demoCut },
+    { title: 'Context carries the rest', text: 'The blue layer is Context & Connected Data: the oxygen. Models, orchestration and agents all stand on it. Land it badly and everything above shrinks.', demo: demoContext },
+    { title: 'Build all six', text: `Finish a stack for a bonus, then build the next one faster. Miss a layer completely and the stack collapses. Three collapses or ${DURATION} seconds end the round.`, demo: demoFull },
+  ];
+
+  if (BS.params.has('debug')) window.__dbg = {
+    state: () => ({ stack, cur, score, lives, phase, stackNo, time }),
+    step: (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); draw(); },
+    drop: () => drop(false),
+    place: off => { if (cur) { const p = stack.length ? stack[stack.length - 1] : BASE; cur.c = p.u + off + cur.ww / 2; cur.born = -9; drop(false); } },
+  };
+  resize();
+  window.addEventListener('resize', resize);
+  BS.init({
+    id: 'stack-up',
+    tagline: 'Build your AI stack. It is only as strong as the context it stands on.',
+    onStart: start,
+    tutorial: TUTORIAL,
+  });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

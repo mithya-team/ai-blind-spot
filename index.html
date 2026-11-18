@@ -113,7 +113,7 @@
   <main class="hero">
     <div class="intro">
       <h1 aria-label="The AI Blind Spot"><small aria-hidden="true">The AI</small><span aria-hidden="true">Blind Sp<i class="spot"></i>t</span></h1>
-      <p class="lede">Your AI is only as smart as the information it can reach. <b>Three quick games. Beat the room.</b></p>
+      <p class="lede">Models and agents stall without context. Your AI is only as smart as the information it can reach. <b>A few quick games. Beat the room.</b></p>
     </div>
     <form class="join" id="join" autocomplete="on">
       <h2>Who's playing?</h2>
@@ -129,7 +129,7 @@
     </form>
   </main>
 </div>
-<script src="shared/common.js?v=14"></script>
+<script src="shared/common.js?v=15"></script>
 <script>
   const next = BS.params.get('next'), dest = next && /^[a-z0-9-]+\.html$/.test(next) ? next : 'games.html';
   if (BS.hasPlayer()) location.replace(dest); // already signed in on this device: go straight to the games

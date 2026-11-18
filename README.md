@@ -1,6 +1,8 @@
 # The AI Blind Spot: roundtable games
 
-Three short phone games and a leaderboard for **"The AI Blind Spot: Your AI Is Only as Smart as the Information It Can Access"**. It's an executive roundtable hosted by OpenText with AWS and Capgemini, for 12 to 20 senior executives, with no slides, demos or pitches.
+Short phone games and a leaderboard for **"The AI Blind Spot: Your AI Is Only as Smart as the Information It Can Access"**. It's an executive roundtable hosted by OpenText with AWS and Capgemini, for 12 to 20 senior executives, with no slides, demos or pitches.
+
+> **Status: five candidate games, three will ship.** The site currently carries five games so the internal team can vote. The event should show three. See [Choosing the final three](#choosing-the-final-three).
 
 People play on their own phones whenever they have a few minutes. They sign in with first name and company, play each game (one practice round, then three ranked attempts), and compete on a per-game and an overall leaderboard. The leaderboard can also be shown on a screen in the room.
 
@@ -51,10 +53,12 @@ Serve the folder over HTTP rather than opening the files from disk (`file://`), 
 
 ```
 index.html          First page: intro, co-brand logos, sign-in ("Who's playing?")
-games.html          The three games, your progress in each, your overall standing
-golden-thread.html  Game 1
-deep-dive.html      Game 2
-clear-cut.html      Game 3
+games.html          The games, your progress in each, your overall standing
+golden-thread.html  Game: Golden Thread
+deep-dive.html      Game: Deep Dive
+clear-cut.html      Game: Clear Cut
+stack-up.html       Game: Stack Up     (candidate, added for the vote)
+vital-signs.html    Game: Vital Signs  (candidate, added for the vote)
 leaderboard.html    Overall + one tab per game; ?screen = room display
 shared/common.js    Everything shared: players, rounds, scores, leaderboards, cards, tutorial, sound, logos
 shared/common.css   Styles for the shared cards (intro, tutorial, results)
@@ -73,7 +77,7 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
    - New players type first name and company (both required).
    - Returning players pick themselves from "Played before? Pick your name". The list filters as they type a first name.
    - If this device already has a signed-in player, the page skips straight to `games.html`.
-2. **`games.html`**: three cards (three tall columns on wide screens, one column on phones). Each card shows progress (four dots: practice plus three attempts), the best score and the next action, for example "Play attempt 2 of 3". The header has "Playing as …", "Not you?" (which signs out) and the leaderboard link.
+2. **`games.html`**: one card per game (tall columns on wide screens, one column on phones; with more than three games, all of them sit side by side from 1280 px and wrap three to a row below that). Each card shows progress (four dots: practice plus three attempts), the best score and the next action, for example "Play attempt 2 of 3". The header has "Playing as …", "Not you?" (which signs out) and the leaderboard link.
 3. **A game page.** The shared shell (in `common.js`) shows:
    1. **Intro card:** what the game means in terms of the roundtable's theme, round progress and the sound switch.
    2. **Tutorial:** 4 or 5 animated steps, shown the first time only and replayable from "How to play". The last button reads "Play practice round".
@@ -102,7 +106,19 @@ These live in `shared/common.js`: `MAX_RUNS`, `nextMode()`, `standing()`, `recor
 
 ## The three games
 
-All three are one HTML file each, drawn on a `<canvas>`. They share the same contract with the shell:
+There are five while the team votes: the original three, plus Stack Up and Vital Signs.
+
+### Where the themes come from
+OpenText's current positioning (two slides shared by the client in November 2026) is the source for the wording in every game. Use these terms exactly:
+
+- **The stack**, bottom to top: Infrastructure, Systems of Record, **Context & Connected Data** (OpenText's layer), Language Models, Orchestration, Application & Agents.
+- **The body analogy**, in the same order: skeleton, vital organs, **oxygen**, brain, nervous system, muscles. "Context is the oxygen" is the headline idea, and "models and agents stall without context" is their line.
+- **OpenText's claim:** governed, secure, unstructured content as the context layer.
+- **Capgemini's angle** (their CEO's post on AI costs): oversight, rework and governance are the hidden cost of AI.
+
+Each game carries one of these: Golden Thread is *connected data*, Deep Dive is *context as oxygen*, Clear Cut is *governed*, Stack Up is *the six layers*, Vital Signs is *the body*.
+
+Every game is one HTML file, drawn on a `<canvas>`. They share the same contract with the shell:
 
 ```js
 BS.init({ id, tagline, onStart(mode), tutorial: [{ title, text, demo(ctx, w, h, t) }] });
@@ -120,9 +136,9 @@ BS.finish({ score, headline, theme, stats: { ... }, win });
 - **Look:** engraved navy with gold.
 
 ### Deep Dive (`deep-dive.html`, id `deep-dive`)
-- **Play:** slide to steer a light falling through six layers of the business: Cloud apps, Shared drives, Email archives, Legacy applications, Core systems and Offline archives, from 0 to 6,200 m. Walls are legacy systems; glowing documents refill your light. Light fades over time and when you hit walls. The game ends when the light runs out ("Your AI went dark") or at the bottom ("All the way down").
-- **Score:** depth descended in metres, plus 25 per document, plus a bonus for reaching the bottom (1,000 + 10 × remaining light).
-- **Difficulty:** fall speed, gap width, wall density, light drain and darkness all increase with depth.
+- **Play:** slide to steer your AI as it sinks through six layers of the business: Cloud apps, Shared drives, Email archives, Legacy applications, Systems of record and Offline archives, from 0 to 6,200 m. Walls are legacy systems; glowing documents top up your **context**, the meter under the depth reading, described to players as the AI's oxygen. Context runs down over time and when you hit walls, and the glow around the AI dims with it. The game ends when context runs out ("Your AI ran out of context") or at the bottom ("All the way down"). In the code the meter is still the variable `light`.
+- **Score:** depth descended in metres, plus 25 per document, plus a bonus for reaching the bottom (1,000 + 10 × remaining context).
+- **Difficulty:** fall speed, gap width, wall density, context drain and darkness all increase with depth.
 - **Stats:** `depth`, `layers`, `layerName`, `docs`, `hits`.
 - **Internals:** the maths still runs on an internal "year" axis (2026 down to 1964) left over from its earlier version, "Back to 1964". That axis is never shown to players; depth = (2026 − internal year) × 100 m. The old name was dropped on purpose (see [Decisions](#decisions-already-made)).
 - **Saved scores:** `common.js` moves any saved `back-to-1964` rounds to `deep-dive` on load.
@@ -135,6 +151,33 @@ BS.finish({ score, headline, theme, stats: { ... }, win });
   - +25 per approved seal.
 - **Difficulty:** more panes, and seals go from 20% to 32% of what spawns.
 - **Stats:** `cleared`, `approved`, `combo`, `breaches`.
+
+### Stack Up (`stack-up.html`, id `stack-up`) — candidate
+- **Play:** a layer of the AI stack slides across the screen; tap (or click, or press space) to drop it. Whatever overhangs the layer below is cut away, so each layer can only be as wide as the one beneath it. You build the six layers from Infrastructure up to Application & Agents, then start a new, faster stack. Missing a layer completely collapses the stack. Three collapses or 90 seconds end the round.
+- **The message is the rule:** the blue Context & Connected Data layer limits everything above it. Dashed guides rise from its edges once it lands.
+- **Body analogy:** each slab carries its body part (on wide screens the parts sit beside the stack as callouts).
+- **Score:** per layer, 100 × its width as a share of the base. A perfect drop (within 3.5% of the base width) adds 25, 50, 75 then 100 for consecutive perfects. Finishing a stack adds 500 × the top layer's width. Everything is multiplied by 1 + 0.2 × the number of stacks already finished, and rounded to 5.
+- **Difficulty:** slide speed rises with each finished stack (1.05 base widths per second, +0.12 per stack, capped after nine).
+- **Stats:** `stacks`, `context` (average width of the context layer, %), `perfect`, `collapses`.
+- **Internals:** slabs are stored in "stack units" (`u` = left edge from the centre line, `ww` = width, both as a fraction of the base width), so a round survives a window resize. Behind the intro card the game plays itself.
+- **Look:** dark emerald, with the context layer in OpenText blue.
+
+### Vital Signs (`vital-signs.html`, id `vital-signs`) — candidate
+- **Play:** a figure of light stands for the AI. Its brain is the models, its nervous system is orchestration, its muscles are the agents. Each has a ring that runs down as it works. Blue bubbles are governed context (oxygen): drag one onto a part to refill it. Grey bubbles are raw, unstructured content: tap one to govern it, and it turns blue. Feed a part raw content and it chokes (it loses oxygen). A part whose ring empties stalls. Three stalls or 75 seconds end the round.
+- **Score:** 20 per delivery (30 if the part was under 25%), 5 per bubble governed, and 2 per working part every second. Deliveries and the per-second score are multiplied by a "steady" multiplier that rises by 1 for every 6 seconds without a stall or choke, up to ×5.
+- **Difficulty:** parts use oxygen faster as the round goes on (3.2% to 6.2% per second, with short surges at about double), bubbles arrive faster, and more of them are raw (30% to 50%).
+- **Stats:** `oxygen` (average level, %), `fed`, `governed`, `stalls`.
+- **Extras:** the heartbeat trace under the score reflects the average oxygen level and flattens when a part stalls. On wide screens a legend lists all six body parts against the six stack layers.
+- **Look:** deep plum with rose; the figure is abstract on purpose, so it doesn't look medical.
+
+### Choosing the final three
+The event should show three games (12 to 20 executives, each game has four rounds). After the vote, remove each dropped game in four places:
+1. Its entry in `GAMES` in `shared/common.js` (this also removes it from the Overall score).
+2. Its card in `games.html`.
+3. Its entry in `LOOK` in `leaderboard.html`.
+4. Its HTML file.
+
+Then clear test data (see [Resetting a device](#resetting-a-device)). Deep Dive and Vital Signs both use the oxygen idea, so keeping both would repeat it; the suggestion to the client was to keep one of them.
 
 ### Shared game behaviour
 - **Performance:**
@@ -167,7 +210,7 @@ All of it runs synchronously against a local store through two private functions
 Every page links `shared/common.js?v=N` and `shared/common.css?v=N`. **When you change anything in `shared/`, bump `N` in every HTML file**, or phones keep the old copy:
 
 ```bash
-sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=15"#g' *.html   # current is v=14; macOS sed, drop '' on Linux
+sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=16"#g' *.html   # current is v=15; macOS sed, drop '' on Linux
 ```
 
 ### Adding or changing a game
@@ -328,6 +371,7 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
   - **Frame rate** on mid-range and older phones, and with iPhone Low Power Mode (30 fps).
   - **iOS Safari rendering:** Clear Cut and Deep Dive use an off-canvas shadow trick for soft shadows. If Safari handles it differently they lose their shadows but still work.
   - **Touch feel and difficulty balance** with real players.
+  - **Stack Up and Vital Signs** were built last and have only been played in headless Chrome with a simulated mouse. Vital Signs' drag-and-drop in particular needs trying with a real finger, and both games' difficulty is a first guess. Both use a little per-frame `shadowBlur` (the blue context slab; the oxygen bubbles), which the older three games avoid; check frame rate on older phones.
   - **Sound** on iOS: audio starts only after a tap, which the sound switch provides.
   - **Venue Wi-Fi.**
 
@@ -335,7 +379,7 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
 
 ## Design system
 
-- **Typeface:** Inter only, everywhere, including inside the games. Bold (700) for titles, Regular (400) for body, with 500 and 600 for small labels and buttons. The three games are told apart **by colour only**, never by typeface (client decision).
+- **Typeface:** Inter only, everywhere, including inside the games. Bold (700) for titles, Regular (400) for body, with 500 and 600 for small labels and buttons. The games are told apart **by colour only**, never by typeface (client decision).
 - **Base:** night-sky navy `#070a13`, text `#eef1f8`, accent blue `#8fb0ff`.
 - **Game colours:**
 
@@ -344,6 +388,8 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
   | Golden Thread | gold `#f1d48a` / `#f6dc98` | navy `#0a1535` |
   | Deep Dive | cyan `#9eeaff` | deep teal `#0d2a40` |
   | Clear Cut | lilac `#d9ccff` | deep plum `#211d47` (inside the game: light frosted glass) |
+  | Stack Up | emerald `#7df0b8` / `#8ff0c0` | deep green `#0a2a22` (context layer: blue `#4a8dff`) |
+  | Vital Signs | rose `#ff9db2` / `#ffa3b6` | deep wine `#2c1024` (oxygen: cyan `#9fe8ff`) |
 
 - **Shared card theme:** each game sets CSS variables in its `:root` (`--bg --fg --accent --on-accent --card --line --chip --scrim --font-display --display-weight --demo-bg --bad`); `shared/common.css` styles the cards from them.
 - **First page:** an animated eclipse. The "o" in "Blind Spot" and the large eclipse in the top right are the "blind spot"; small points of light (information) drift across and disappear behind it.
@@ -403,7 +449,9 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
 
 These were settled with the client. Please don't undo them without checking.
 
-- **Games:** the three games above. "Deep Dive" replaced "Back to 1964": the client felt no real company thinks about its information in decades, so the theme is **depth and layers**, never years or eras.
+- **Games:** three games at the event, chosen by an internal vote from the five candidates above (the client's plan, November 2026).
+- **Wording:** games use OpenText's own terms: context and connected data, the six stack layers, the body analogy with context as oxygen, governed unstructured content. Deep Dive's meter is "context", not "light".
+- **Still true:** "Deep Dive" replaced "Back to 1964": the client felt no real company thinks about its information in decades, so the theme is **depth and layers**, never years or eras.
 - **Rounds:** one practice round, then three ranked attempts per game. Best attempt counts; practice counts only if no attempt was played.
 - **Layouts:** random layout per player.
 - **Sign-in:**
@@ -414,4 +462,4 @@ These were settled with the client. Please don't undo them without checking.
 - **Typography and colour:** Inter everywhere; games differ by colour only. The Clear Cut card is dark on the games list so it doesn't outshine the other two.
 - **Sound:** off by default.
 - **Desktop:** games run full screen on desktop, with no phone-shaped frame. The intro, tutorial and results cards use a two-column layout on wide windows. (A phone frame was tried and dropped.)
-- **Leaderboard:** an Overall tab across all three games is required. No big title or description under the tabs.
+- **Leaderboard:** an Overall tab across all games is required. No big title or description under the tabs.
