@@ -8,7 +8,7 @@ People play on their own phones whenever they have a few minutes. They sign in w
 
 - **Live site:** https://mithya-team.github.io/ai-blind-spot/
 - **Repository:** https://github.com/mithya-team/ai-blind-spot
-- **Status:** working prototype. The games, sign-in, rounds, leaderboards, desktop layout and hosting are done. **The leaderboard is not shared between devices yet**; see [Making the leaderboard shared](#making-the-leaderboard-shared), which is the main piece of work left.
+- **Status:** working prototype. The games, sign-in, rounds, leaderboards, prizes, hosting and the shared leaderboard code are done. **The shared leaderboard is off until a Supabase project is connected**; see [Shared leaderboard](#shared-leaderboard), about 10 minutes of setup.
 
 ---
 
@@ -21,15 +21,16 @@ People play on their own phones whenever they have a few minutes. They sign in w
 5. [The three games](#the-three-games)
 6. [Code structure](#code-structure)
 7. [Data model](#data-model)
-8. [Making the leaderboard shared](#making-the-leaderboard-shared)
+8. [Shared leaderboard](#shared-leaderboard)
 9. [Deployment and hosting](#deployment-and-hosting)
-10. [Testing](#testing)
-11. [Design system](#design-system)
-12. [Brand assets and sign-off](#brand-assets-and-sign-off)
-13. [Privacy and data](#privacy-and-data)
-14. [Event-day checklist](#event-day-checklist)
-15. [Known limitations and open items](#known-limitations-and-open-items)
-16. [Decisions already made](#decisions-already-made)
+10. [Share images and icons](#share-images-and-icons)
+11. [Testing](#testing)
+12. [Design system](#design-system)
+13. [Brand assets and sign-off](#brand-assets-and-sign-off)
+14. [Privacy and data](#privacy-and-data)
+15. [Event-day checklist](#event-day-checklist)
+16. [Known limitations and open items](#known-limitations-and-open-items)
+17. [Decisions already made](#decisions-already-made)
 
 ---
 
@@ -59,13 +60,16 @@ deep-dive.html      Game: Deep Dive
 clear-cut.html      Game: Clear Cut
 stack-up.html       Game: Stack Up     (candidate, added for the vote)
 vital-signs.html    Game: Vital Signs  (candidate, added for the vote)
-leaderboard.html    Overall + one tab per game; ?screen = room display
-shared/common.js    Everything shared: players, rounds, scores, leaderboards, cards, tutorial, sound, logos
+leaderboard.html    Overall + one tab per game, the prizes, a QR code; ?screen = the TV in the room
+shared/config.js    Event settings: shared-leaderboard keys, prizes, QR address, "Not you?" switch
+shared/common.js    Everything shared: players, rounds, scores, sync, the phone-only screen, cards, tutorial, sound, logos
 shared/common.css   Styles for the shared cards (intro, tutorial, results)
 shared/ot-icon.png  OpenText "ot" icon (from their partner brand guide)
 icons/              Favicons and home-screen icon, made from the OpenText "ot" icon
 og/                 Share images (1200 x 630), one per page, for link previews
 tools/og/           Generator for the share images (see "Share images and icons")
+icons/qr-play.svg   QR code to the live site, shown on computers and the TV
+supabase/schema.sql Database setup for the shared leaderboard
 shared/ot-word.png  OpenText wordmark in white (rendered from their partner brand guide)
 README.md           This file
 ```
@@ -79,6 +83,7 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
 1. **`index.html`**: title, one-line description, full sponsor logos, and "Who's playing?".
    - New players type first name and company (both required).
    - Returning players pick themselves from "Played before? Pick your name". The list filters as they type a first name.
+   - The "pick your name" list only shows people who signed in **on this device**. With a shared leaderboard, listing everyone would let a player pick someone else's name.
    - If this device already has a signed-in player, the page skips straight to `games.html`.
 2. **`games.html`**: one card per game (tall columns on wide screens, one column on phones; with more than three games, all of them sit side by side from 1280 px and wrap three to a row below that). Each card shows progress (three dots, one per attempt), the best score and the next action, for example "Play attempt 2 of 3". The header has "Playing as …", "Not you?" (which signs out) and the leaderboard link.
 3. **A game page.** The shared shell (in `common.js`) shows:
@@ -86,9 +91,13 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
    2. **Tutorial:** 4 or 5 animated steps, shown the first time only and replayable from "How to play". The last button reads "Play attempt 1 of 3".
    3. **The round.**
    4. **Results card:** score, a one-line takeaway built from the round's stats, four stat tiles, round progress, the next button and the top 5.
-4. **`leaderboard.html`**: Overall plus one tab per game, with each row showing the game's themed stats.
+4. **`leaderboard.html`**: the prizes, a "You're #5 overall, 120 pts from 3rd" line for the signed-in player, then Overall plus one tab per game, each row showing the game's themed stats. On wide screens the prizes and a "Scan to play" QR code sit in a column on the right. `?screen` is the TV layout (below).
 
-**Wide screens.** Every game runs full-window on any screen size: the canvas fills the browser and the game adapts to it. The intro, tutorial and results cards switch to a two-column layout when the window is at least 980 × 620 px (rules beside the title, the demo beside the explanation, the leaderboard beside the score). Each card's contents are grouped in `.ga` / `.gb` wrappers, which are `display: contents` on phones so the single-column order is unchanged. A desktop playfield is larger than a phone's, so desktop and phone scores aren't strictly comparable; at the event most people play on phones.
+**Phones and tablets only.** On a device without a touchscreen, every page except the leaderboard is covered by a "Play on your phone" screen with a QR code and a link to the leaderboard (`showGate()` in `common.js`). Detection is by touch (`any-pointer: coarse` or `maxTouchPoints > 1`), not width, so tablets in landscape and iPads (which report themselves as Macs) still play. Add `?desktop` to any address to play on a computer anyway, for testing; it's remembered in that browser, and `?desktop=0` undoes it. `?auto`, `?tut` and `?debug` also skip the screen.
+
+**The TV (`leaderboard.html?screen`).** Overall only, no tabs: the top 8 on the left, and on the right the prizes (each showing who holds that place right now) and a large "Scan to play" QR code. Sized in viewport units for a 16:9 screen. With the shared leaderboard it refreshes every 4 s and shows a "Live" badge, or "Reconnecting" if the connection drops.
+
+**Wide screens.** Games run full-window on any screen size (when allowed, see above): the canvas fills the browser and the game adapts to it. The intro, tutorial and results cards switch to a two-column layout when the window is at least 980 × 620 px (rules beside the title, the demo beside the explanation, the leaderboard beside the score). Each card's contents are grouped in `.ga` / `.gb` wrappers, which are `display: contents` on phones so the single-column order is unchanged. A desktop playfield is larger than a phone's, so desktop and phone scores aren't strictly comparable; at the event most people play on phones.
 
 ---
 
@@ -98,10 +107,11 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
 |---|---|
 | Identity | First name (max 24 chars) plus company (max 32). A player's key is `lower(name) + "\|" + lower(company)`. |
 | Rounds per game | 3 attempts, all scored. After that the game is "Complete". There is no practice round: the tutorial teaches each game instead. |
-| Which score counts | The best of the player's attempts. |
-| Overall leaderboard | Each game is worth up to 1,000 points: the top score in that game gets 1,000 and everyone else gets `round(1000 × score / top)`. The overall score is the sum, so up to 3,000. Ties are broken by number of games played. Rows show "2 of 3 played" when someone skipped a game. Because it's relative, everyone's points in a game shift when that game's top score improves. |
+| Which score counts | The best of the player's attempts. On a tie in a game, whoever got there first ranks higher. |
+| Prizes | 1st, 2nd and 3rd on the **Overall** leaderboard, plus a prize for everyone who plays. Set in `shared/config.js`. |
+| Overall leaderboard | Each game is worth up to 1,000 points: the top score in that game gets 1,000 and everyone else gets `round(1000 × score / top)`. The overall score is the sum, so up to 3,000 with three games. Ties are broken by number of games played, then by whoever set their scores earlier. Rows show "2 of 3 played" when someone skipped a game. Because it's relative, everyone's points in a game shift when that game's top score improves. |
 | Layout | Every player gets a random layout. A fixed shared layout was considered and rejected. |
-| Round length | Golden Thread and Clear Cut: 75 s. Deep Dive: until your light runs out or you reach the bottom (about 2.5 min at most). |
+| Round length | Golden Thread, Clear Cut and Vital Signs: 75 s. Stack Up: 90 s. Deep Dive: until context runs out or you reach the bottom (about 2.5 min at most). |
 
 These live in `shared/common.js`: `MAX_RUNS`, `nextMode()`, `standing()`, `record()`, `board()` and `overall()`.
 
@@ -225,16 +235,7 @@ sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=16"#g' 
 
 ## Data model
 
-Stored today in each browser's `localStorage`:
-
-| Key | Contents |
-|---|---|
-| `bs_db_v2` | All players and rounds on this device (below) |
-| `bs_player` | `{ name, company }` of who is signed in on this device |
-| `bs_sound` | `true` / `false` |
-| `bs_tut_<game-id>` | `true` once that game's tutorial has been seen |
-
-`bs_db_v2` shape:
+Every page reads one shape, whichever mode it's in:
 
 ```json
 {
@@ -242,11 +243,10 @@ Stored today in each browser's `localStorage`:
     "priya|capgemini": {
       "name": "Priya",
       "company": "Capgemini",
-      "seen": 1794550000000,
       "games": {
         "golden-thread": {
           "runs": [
-            { "score": 1640, "stats": { "connected": 41, "longest": 9, "pictures": 2, "lost": 1 }, "at": 1794550100000 }
+            { "id": "6f1c…", "score": 1640, "stats": { "connected": 41, "longest": 9, "pictures": 2, "lost": 1 }, "at": 1794550100000 }
           ]
         }
       }
@@ -255,83 +255,52 @@ Stored today in each browser's `localStorage`:
 }
 ```
 
-`runs` holds at most 3 entries. Leaderboards are computed from this on the client.
+`runs` holds at most 3 entries. Leaderboards are computed from this in the browser (`board()`, `overall()`).
+
+`localStorage` keys:
+
+| Key | Contents |
+|---|---|
+| `bs_player` | `{ name, company }` of who is signed in on this device |
+| `bs_known_v1` | Everyone who has signed in on this device (for "pick your name") |
+| `bs_db_v2` | **Local mode** (no Supabase configured): every player and round played on this device |
+| `bs_shared_v1` | **Shared mode**: the last copy of the shared leaderboard |
+| `bs_queue_v1` | **Shared mode**: rounds played here that the server hasn't confirmed yet |
+| `bs_sound`, `bs_tut_<game>`, `bs_desktop` | Sound on/off, tutorial seen, "play on a computer anyway" |
 
 ---
 
-## Making the leaderboard shared
+## Shared leaderboard
 
-**This is the main remaining task.** Today each phone only sees players and scores recorded on that phone. GitHub Pages only serves static files, so a shared leaderboard needs a small hosted store.
+Built in, and off until `shared/config.js` names a Supabase project. Without it, each device keeps its own scores (the prototype). With it, every phone, tablet and the TV read and write one leaderboard.
 
-### Recommended: Supabase (free tier)
-It works directly from a static site with a public "anon" key, has Postgres with row-level security, and has realtime updates for the room display. Firebase or a small API on AWS would work the same way; nothing below depends on Supabase specifically.
+### Switching it on (about 10 minutes)
+1. Create a free project at [supabase.com](https://supabase.com) under the Mithya Labs account. Pick a region near the event (EU for London, for example).
+2. **SQL Editor → New query**, paste all of [`supabase/schema.sql`](supabase/schema.sql), **Run**. It creates two tables (`players`, `rounds`), a trigger that refuses a fourth round per player per game, and row-level security that lets the browser read and add, nothing else.
+3. **Project Settings → API**: copy the **Project URL** and the **anon / publishable** key into `supabaseUrl` and `supabaseKey` in `shared/config.js`. The anon key is designed to be public; never use the `service_role` key.
+4. Bump the cache version (see [Cache-busting](#cache-busting)), commit and push. Pages redeploys in about a minute.
+5. Check: play a round on two phones; both should appear on the leaderboard, with a green "Live" badge.
 
-**1. Create a project** under a Mithya Labs account. Create the account yourselves; it isn't set up yet.
+### How it works (`sync` in `shared/common.js`, no SDK, plain REST)
+- **Playing a round:** `record()` adds it to `bs_queue_v1` with a random `client_id`, then `sync.run()` sends it. Because the server ignores a repeated `client_id`, a retry after a dropped connection can't count twice.
+- **Reading:** `sync.pull()` fetches all players and rounds (a few hundred rows at most) into `bs_shared_v1`. `db()` merges that copy with anything still queued, so the player sees their own round immediately even offline.
+- **When:** on every page load, when the phone comes back online or back to the foreground, after every round, every 8 s on the leaderboard and every 4 s on the TV. Pages redraw on the `bs:sync` event.
+- **Rules on the server:** the three-round limit is enforced by the trigger, so nobody can add a fourth from another phone. A round the server refuses is dropped from the queue.
+- **Attempts follow the name, not the phone:** signing in with the same name and company on a second phone continues the same three attempts.
 
-**2. Schema** (run in the SQL editor):
+### Admin
+In the Supabase SQL Editor:
+- Clear all test data before the event: `truncate rounds, players;`
+- Remove one player: `delete from players where key = 'priya|capgemini';` (their rounds go too)
+- Export: **Table Editor → rounds → Export to CSV**, or `select * from rounds order by created_at;`
 
-```sql
-create table players (
-  key        text primary key,              -- lower(name) || '|' || lower(company)
-  name       text not null check (char_length(name) between 1 and 24),
-  company    text not null check (char_length(company) between 1 and 32),
-  created_at timestamptz not null default now(),
-  last_seen  timestamptz not null default now()
-);
+### Fairness
+- **Ties** go to whoever set the score first (server time).
+- **"Not you?"** lets a phone switch names, which also means a fresh three attempts under a new name. On event day set `allowSwitchPlayer: false` in `shared/config.js` to hide it, and have the host confirm winners in person.
+- **Fake scores:** anyone who reads the code could post a round directly with the anon key. For a 20-person roundtable a host check of the top three is enough; if more is ever needed, move the insert behind a Supabase Edge Function that checks plausibility.
 
-create table rounds (
-  id         bigint generated always as identity primary key,
-  player_key text not null references players(key) on delete cascade,
-  game       text not null check (game in ('golden-thread', 'deep-dive', 'clear-cut', 'stack-up', 'vital-signs')),  -- trim to the final three
-  mode       text not null default 'ranked' check (mode = 'ranked'),
-  score      integer not null check (score between 0 and 100000),
-  stats      jsonb not null default '{}',
-  created_at timestamptz not null default now()
-);
-create index on rounds (game, player_key);
-
--- Enforce the rules on the server: at most three rounds per player per game.
-create or replace function max_three_ranked() returns trigger language plpgsql as $$
-begin
-  if new.mode = 'ranked' and (select count(*) from rounds
-      where player_key = new.player_key and game = new.game and mode = 'ranked') >= 3 then
-    raise exception 'All three attempts already played';
-  end if;
-  return new;
-end $$;
-create trigger rounds_max_three before insert on rounds for each row execute function max_three_ranked();
-
--- Public read and insert only. No updates or deletes from the client.
-alter table players enable row level security;
-alter table rounds  enable row level security;
-create policy "read players"   on players for select using (true);
-create policy "add players"    on players for insert with check (true);
-create policy "touch players"  on players for update using (true) with check (true);  -- only for last_seen; tighten if needed
-create policy "read rounds"    on rounds  for select using (true);
-create policy "add rounds"     on rounds  for insert with check (true);
-```
-
-Tighten the score bounds per game once you've seen real scores, or move score validation into an RPC.
-
-**3. Wire it into `shared/common.js`.** Keep the public `BS` API and the UI synchronous: treat `localStorage` as a cache that mirrors the server.
-
-- **On page load**, before rendering: fetch `players` and `rounds` and rebuild the `bs_db_v2` shape above into the cache. One small query is fine for 20 people; for more, select only what each page needs.
-- **`setPlayer()`**: upsert into `players` (and update `last_seen`), then update the cache.
-- **`record()`**: insert into `rounds`, then update the cache. If the insert is rejected (for example a fourth attempt), keep the server's answer.
-- **`players()`, `board()`, `overall()`**: unchanged; they read the cache.
-- **`leaderboard.html?screen`**: subscribe to realtime inserts on `rounds`, or keep its existing 4-second refresh but re-fetch. `games.html` should re-fetch on focus.
-- **Offline:** if a write fails, queue it in `localStorage` and retry, so a dropped connection doesn't lose a round.
-
-The Supabase JS client loads from a CDN with a plain `<script>` tag, so the no-build setup can stay. The anon key is designed to be public; row-level security is what protects the data.
-
-**4. Admin.** Add a simple way to:
-- clear all test data before the event: `truncate rounds, players;`
-- export results afterwards: CSV from the Supabase table view.
-
-### Things the shared store changes
-- **Returning on a new phone:** a player picks their name from the shared list and keeps their attempts. Today that only works on the same device.
-- **Impersonation:** anyone can pick anyone's name from the list. Acceptable for a private event of 12 to 20 people; add a 4-digit PIN at sign-in if that's not enough.
-- **Cheating:** scores are computed in the browser, so a determined person could post a fake score. The bounds and the attempt trigger limit the damage. Server-side replay validation isn't worth it for this event.
+### Testing it without Supabase
+Any server that speaks PostgREST's `GET /rest/v1/players`, `GET /rest/v1/rounds` and `POST …?on_conflict=` with `Prefer: resolution=ignore-duplicates` works. During development a ~100-line Python mock with the same rules (three rounds, unique `client_id`) was used to test two phones, the offline queue and the server's refusal of a fourth round.
 
 ---
 
@@ -374,11 +343,12 @@ Every page has a description, favicon tags and Open Graph / Twitter tags, so a l
 | `?t=20` | Golden Thread, Clear Cut | Round length in seconds |
 | `?from=3000` | Deep Dive | Start depth in metres (0 to 6,100) |
 | `?tut` | game pages | Opens the tutorial directly |
-| `?screen` | leaderboard | Room-display layout, rotates through the tabs every 12 s |
+| `?screen` | leaderboard | The TV layout: Overall, prizes, QR code |
+| `?desktop` | any page | Play on a computer anyway (remembered; `?desktop=0` undoes it) |
 | `#deep-dive` etc. | leaderboard | Opens that tab |
 
 ### Resetting a device
-In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out without deleting scores.
+In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out. With the shared leaderboard on, scores live on the server: clear them there (see [Admin](#admin)).
 
 ### What has and hasn't been tested
 - **Tested:**
@@ -432,20 +402,23 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
 ## Privacy and data
 
 - **What's collected:** first name and company. No email. The sign-in screen says these appear on the event leaderboard.
-- **Where it's stored today:** each player's own browser only.
-- **With a shared store:** names and companies will sit on the store's servers. Keep the project in a suitable region and **delete the data after the event** (`truncate rounds, players;`).
-- **No tracking:** no analytics, no cookies and no third-party scripts apart from Google Fonts. Self-host Inter if even that isn't wanted.
+- **Where it's stored:** each player's own browser, and once the shared leaderboard is connected, the Supabase project. The leaderboard is public to anyone with the link, as the sign-in screen says.
+- **Shared store:** names and companies sit on Supabase's servers. Keep the project in a suitable region and **delete the data after the event** (`truncate rounds, players;`).
+- **No tracking:** no analytics, no cookies and no third-party scripts apart from Google Fonts (and calls to your own Supabase project). Self-host Inter if even that isn't wanted.
 
 ---
 
 ## Event-day checklist
 
-- [ ] Shared leaderboard live and tested from several phones at once.
+- [ ] Shared leaderboard connected (`shared/config.js`) and tested from several phones at once; the TV shows "Live".
+- [ ] Prizes and photos final in `shared/config.js`.
+- [ ] `allowSwitchPlayer: false` in `shared/config.js`, so phones can't switch names for extra attempts.
 - [ ] Official logos in place and sponsor sign-offs received.
 - [ ] All test players and scores cleared (`truncate rounds, players;`).
 - [ ] Tried on at least one iPhone and one Android, on the venue Wi-Fi if possible.
-- [ ] A QR code to the live URL printed for tables, cards or the screen.
-- [ ] Room screen showing `leaderboard.html?screen`. Use a browser in full-screen mode, keep the screen awake, and sign it out of any player so no row is highlighted.
+- [ ] The TV and computer screens already show a QR code; print `icons/qr-play.svg` for tables or cards too.
+- [ ] TV showing `leaderboard.html?screen` in a full-screen browser, with the screen kept awake.
+- [ ] Host confirms the top three in person before handing out prizes.
 - [ ] Someone briefed to help people sign in, and to remind them that only their best of three attempts counts.
 - [ ] Export the results after the event, then delete the data.
 
@@ -453,9 +426,8 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
 
 ## Known limitations and open items
 
-- **Leaderboard is per device:** see [Making the leaderboard shared](#making-the-leaderboard-shared).
-- **Phones in landscape** get the plain full-window game, because the window is too short for the desktop frame. Portrait is the intended way to play.
-- **Tablets** get the phone frame without the side panels until the window is about 1,040 px wide.
+- **Shared leaderboard not connected yet:** the code is in; it needs a Supabase project (see [Shared leaderboard](#shared-leaderboard)).
+- **Prize photos:** each prize shows a drawn icon until a photo is added (`img` in `shared/config.js`, files in `prizes/`).
 - **"Not you?"** signs the device out; other players' saved data on that device stays.
 - **Deep Dive's internal axis** is still named in years (see above). It's harmless, but worth renaming if you touch that file.
 - **The overall score is relative**, so points shift as the top scores change. The alternative, points by finishing position, was discussed and not chosen.
@@ -472,12 +444,15 @@ These were settled with the client. Please don't undo them without checking.
 - **Still true:** "Deep Dive" replaced "Back to 1964": the client felt no real company thinks about its information in decades, so the theme is **depth and layers**, never years or eras.
 - **Rounds:** three attempts per game, best one counts, no practice round (changed 2026-11-19 to keep it simple; the tutorial teaches each game). Old saved data may hold a `practice` entry per game, which is ignored.
 - **Layouts:** random layout per player.
+- **Devices:** games are for phones and tablets only; computers get a "Play on your phone" screen with a QR code. The leaderboard works everywhere and has a TV layout (client decision, 2026-11-19).
+- **Prizes:** shown on the leaderboard on phone, desktop and TV, for 1st, 2nd and 3rd Overall plus everyone who plays. The client has cleared the prizes with their team.
+- **Fairness:** ties go to whoever scored first; a host confirms winners; "Not you?" can be hidden on event day.
 - **Sign-in:**
-  - Name and company are asked once, on the first page. Returning players pick themselves from a list.
+  - Name and company are asked once, on the first page. Returning players pick themselves from a list of names used on that device.
   - No email, because it would feel like lead capture at a no-pitch event.
 - **Pages:** the first page is intro and sign-in only. The games list is a separate page.
 - **Explainers:** each game explains how its mechanics map to the roundtable's theme, and the results and leaderboard show themed stats.
 - **Typography and colour:** Inter everywhere; games differ by colour only. The Clear Cut card is dark on the games list so it doesn't outshine the other two.
 - **Sound:** off by default.
-- **Desktop:** games run full screen on desktop, with no phone-shaped frame. The intro, tutorial and results cards use a two-column layout on wide windows. (A phone frame was tried and dropped.)
+- **Desktop (for testing with `?desktop`):** games run full screen, with no phone-shaped frame. The intro, tutorial and results cards use a two-column layout on wide windows. (A phone frame was tried and dropped.)
 - **Leaderboard:** an Overall tab across all games is required. No big title or description under the tabs.

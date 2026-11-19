@@ -69,10 +69,10 @@ card(os.path.join(OUT, 'leaderboard.png'), 'Leaderboard', 'Every game is worth u
      '#070a13', 'rgba(54,78,160,.5)', '#8fb0ff', '#eef1f8', art=urllib.parse.quote(art), f='Live in the room · <b>Beat the room</b>')
 
 # First page and games page: the real pages, with the sign-in form and personal bits hidden.
-run(os.path.join(OUT, 'index.png'), 1200, 630, f'url:{B}/index.html', 'js:localStorage.clear();1', f'url:{B}/index.html', 'wait:400',
+run(os.path.join(OUT, 'index.png'), 1200, 630, f'url:{B}/index.html', 'js:localStorage.clear();1', f'url:{B}/index.html?desktop', 'wait:400',
     "js:document.querySelector('form.join').style.visibility='hidden';const h=document.querySelector('h1');h.style.fontSize='150px';const l=document.querySelector('.lede');l.style.fontSize='27px';l.style.maxWidth='26ch';1", 'wait:2200')
 big = os.path.join(TMP, 'games-big.png')
-run(big, 1600, 840, f'url:{B}/index.html', SET, f'url:{B}/games.html', 'wait:400',
+run(big, 1600, 840, f'url:{B}/index.html', SET, f'url:{B}/games.html?desktop', 'wait:400',
     "js:document.querySelectorAll('.who,.standing,.note').forEach(e=>e.style.visibility='hidden');document.querySelector('.sub').textContent='Quick games on the AI blind spot. Three attempts each, best one counts.';1", 'wait:2200')
 Image.open(big).resize((1200, 630), Image.LANCZOS).save(os.path.join(OUT, 'games.png'))
 print('Wrote', ', '.join(sorted(os.listdir(OUT))))

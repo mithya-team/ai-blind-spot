@@ -33,6 +33,9 @@ ws.onmessage = e => {
 };
 const send = (method, params = {}) => new Promise(r => { const i = ++id; pend[i] = r; ws.send(JSON.stringify({ id: i, method, params })); });
 await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: +w < 700 });
+// Phones and tablets are touch devices: emulate touch below 700px wide, or when TOUCH=1 (TOUCH=0 turns it off).
+const touch = process.env.TOUCH ? process.env.TOUCH === '1' : +w < 700;
+if (touch) await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 await send('Page.enable'); await send('Runtime.enable');
 const snap = async file => { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(file, Buffer.from(r.result.data, 'base64')); };
 for (const s of steps) {

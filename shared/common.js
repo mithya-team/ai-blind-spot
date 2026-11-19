@@ -4,7 +4,9 @@
      Old saved data may still hold a `practice` entry; it is ignored.)
    - Intro card (what the game means), step-by-step tutorial, end screen with themed stats.
    - Sound: small Web Audio synth, off by default.
-   Everything is stored on this device for now (bs_db_v2). Swap db()/save() for a hosted store later. */
+   Scores: on this device only (bs_db_v2), unless shared/config.js names a Supabase project. Then every round
+   is sent there, and all phones, tablets and the TV read one shared leaderboard (see "sync" below).
+   Games are for phones and tablets: on a computer every page except the leaderboard shows a "scan to play" screen. */
 (() => {
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -14,6 +16,9 @@
   const fmt = n => Math.round(n).toLocaleString('en-US');
   const pl = (n, one, many) => `${fmt(n)} ${n === 1 ? one : (many || one + 's')}`;
   const params = new URLSearchParams(location.search);
+  const CFG = Object.assign({ supabaseUrl: '', supabaseKey: '', playUrl: '', allowSwitchPlayer: true, prizes: [] }, window.BS_CONFIG || {});
+  const REMOTE = !!(CFG.supabaseUrl && CFG.supabaseKey);
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   const nav = (url, replace) => { if (replace) location.replace(url); else location.href = url; };
   const MAX_RUNS = 3;
 
@@ -123,10 +128,14 @@
     },
   };
 
-  /* ---------- Device-local data ---------- */
-  const DB_KEY = 'bs_db_v2';
+  /* ---------- Data ----------
+     Local mode: bs_db_v2 holds every player and round played on this device.
+     Shared mode: bs_shared_v1 is the last copy of the shared leaderboard, and bs_queue_v1 holds rounds played here
+     that the server hasn't confirmed yet. db() merges the two, so everything else reads one shape:
+     { players: { key: { name, company, games: { gameId: { runs: [{ id, score, stats, at }] } } } } } */
+  const DB_KEY = 'bs_db_v2', SNAP_KEY = 'bs_shared_v1', QUEUE_KEY = 'bs_queue_v1', KNOWN_KEY = 'bs_known_v1';
   const LAYERS = ['Cloud apps', 'Shared drives', 'Email archives', 'Legacy applications', 'Systems of record', 'Offline archives'];
-  const db = () => {
+  const localDb = () => {
     const d = store.get(DB_KEY, { players: {} });
     // Deep Dive used to be "Back to 1964": carry saved rounds over and restate their stats as depth.
     let moved = false;
@@ -148,7 +157,123 @@
     if (moved) store.set(DB_KEY, d);
     return d;
   };
-  const save = d => store.set(DB_KEY, d);
+  const sharedDb = () => {
+    const d = store.get(SNAP_KEY, { players: {} });
+    for (const r of store.get(QUEUE_KEY, [])) {
+      const pl = d.players[r.player_key] || (d.players[r.player_key] = { name: r.name, company: r.company, games: {} });
+      const g = pl.games[r.game] || (pl.games[r.game] = { runs: [] });
+      if (!g.runs.some(x => x.id === r.id)) g.runs.push({ id: r.id, score: r.score, stats: r.stats, at: r.at, pending: true });
+    }
+    return d;
+  };
+  const db = () => REMOTE ? sharedDb() : localDb();
+
+  /* ---------- Shared leaderboard (Supabase REST, no SDK) ----------
+     flush() sends queued rounds; pull() fetches every player and round. Rounds carry a client id, so a retry after a
+     dropped connection can't count twice. The server enforces three rounds per player per game (supabase/schema.sql);
+     a round it refuses is dropped from the queue. Pages listen for the "bs:sync" event to redraw. */
+  const api = (path, opt = {}) => fetch(CFG.supabaseUrl.replace(/\/+$/, '') + '/rest/v1/' + path, Object.assign({}, opt, {
+    headers: Object.assign({ apikey: CFG.supabaseKey, Authorization: 'Bearer ' + CFG.supabaseKey, 'Content-Type': 'application/json' }, opt.headers || {}),
+  }));
+  const dropQueued = id => store.set(QUEUE_KEY, store.get(QUEUE_KEY, []).filter(r => r.id !== id));
+  const addToSnap = r => {
+    const d = store.get(SNAP_KEY, { players: {} });
+    const pl = d.players[r.player_key] || (d.players[r.player_key] = { name: r.name, company: r.company, games: {} });
+    const g = pl.games[r.game] || (pl.games[r.game] = { runs: [] });
+    if (!g.runs.some(x => x.id === r.id)) g.runs.push({ id: r.id, score: r.score, stats: r.stats, at: r.at });
+    store.set(SNAP_KEY, d);
+  };
+  const sync = {
+    remote: REMOTE, state: REMOTE ? 'starting' : 'off', last: 0, busy: null,
+    async flush() {
+      const ignore = { Prefer: 'resolution=ignore-duplicates,return=minimal' };
+      for (const r of store.get(QUEUE_KEY, [])) {
+        const pr = await api('players?on_conflict=key', { method: 'POST', headers: ignore, body: JSON.stringify({ key: r.player_key, name: r.name, company: r.company }) });
+        if (!pr.ok && pr.status >= 500) throw new Error('players ' + pr.status);
+        const rr = await api('rounds?on_conflict=client_id', { method: 'POST', headers: ignore, body: JSON.stringify({ client_id: r.id, player_key: r.player_key, game: r.game, score: r.score, stats: r.stats || {} }) });
+        if (rr.ok) { addToSnap(r); dropQueued(r.id); }
+        else if (rr.status >= 400 && rr.status < 500) { dropQueued(r.id); console.warn('Round refused by the server', rr.status, await rr.text()); }
+        else throw new Error('rounds ' + rr.status);
+      }
+    },
+    async pull() {
+      const [pr, rr] = await Promise.all([api('players?select=key,name,company'), api('rounds?select=client_id,player_key,game,score,stats,created_at&order=created_at.asc&limit=20000')]);
+      if (!pr.ok || !rr.ok) throw new Error('pull ' + pr.status + ' ' + rr.status);
+      const players = await pr.json(), rounds = await rr.json(), d = { players: {} };
+      for (const p of players) d.players[p.key] = { name: p.name, company: p.company, games: {} };
+      for (const r of rounds) {
+        const pl = d.players[r.player_key]; if (!pl) continue;
+        const g = pl.games[r.game] || (pl.games[r.game] = { runs: [] });
+        g.runs.push({ id: r.client_id, score: r.score, stats: r.stats || {}, at: Date.parse(r.created_at) });
+      }
+      const have = new Set(rounds.map(r => r.client_id));
+      store.set(QUEUE_KEY, store.get(QUEUE_KEY, []).filter(q => !have.has(q.id)));
+      store.set(SNAP_KEY, d);
+    },
+    run() {
+      if (!REMOTE) return Promise.resolve();
+      if (this.busy) return this.busy;
+      this.busy = (async () => {
+        try { await this.flush(); await this.pull(); this.state = 'live'; this.last = Date.now(); }
+        catch (e) { this.state = 'offline'; console.warn('Sync failed', e); }
+        this.busy = null;
+        window.dispatchEvent(new Event('bs:sync'));
+      })();
+      return this.busy;
+    },
+    pending() { return store.get(QUEUE_KEY, []).length; },
+    every(ms) { if (REMOTE) setInterval(() => { if (!document.hidden) this.run(); }, ms); },
+  };
+  if (REMOTE) {
+    sync.run();
+    window.addEventListener('online', () => sync.run());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) sync.run(); });
+  }
+
+  /* ---------- Phones and tablets only ----------
+     On a computer (no touchscreen) every page but the leaderboard is covered by a "scan to play" screen.
+     ?desktop lets the team test on a laptop and is remembered on that browser (?desktop=0 undoes it).
+     ?auto, ?tut and ?debug are developer options and skip the screen too. */
+  if (params.get('desktop') === '0') store.set('bs_desktop', false); else if (params.has('desktop')) store.set('bs_desktop', true);
+  const page = (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '') || 'index';
+  const touch = (window.matchMedia && matchMedia('(any-pointer: coarse)').matches) || navigator.maxTouchPoints > 1;
+  const GATED = !touch && page !== 'leaderboard' && !store.get('bs_desktop', false) && !['auto', 'tut', 'debug'].some(k => params.has(k));
+  function showGate() {
+    const st = document.createElement('style');
+    st.textContent = `
+      .bs-gate { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 32px; overflow: auto;
+        background: radial-gradient(900px 600px at 20% 0%, rgba(54,78,160,.45), transparent 70%), #070a13; color: #eef1f8;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+      .bs-gate .in { display: grid; grid-template-columns: auto auto; gap: 64px; align-items: center; max-width: 980px; }
+      .bs-gate .bs-full { display: inline-flex; align-items: center; gap: 18px; --lh: 22px; }
+      .bs-gate .bs-full > * { box-sizing: content-box; height: var(--lh); flex: none; }
+      .bs-gate .bs-full > * + * { padding-left: 18px; border-left: 1px solid rgba(255,255,255,.18); }
+      .bs-gate .lf.ot { display: inline-flex; align-items: center; gap: calc(var(--lh) * .34); }
+      .bs-gate .lf.ot img { display: block; height: 100%; width: auto; }
+      .bs-gate .lf.ot img:first-child { clip-path: inset(3% round 22%); transform: scale(1.06); }
+      .bs-gate .lf.aws { height: calc(var(--lh) * 1.12); } .bs-gate .lf.cap { height: calc(var(--lh) * 1.16); }
+      .bs-gate small { display: block; margin: 44px 0 10px; font-size: 15px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #8fb0ff; }
+      .bs-gate h1 { margin: 0 0 18px; font-size: clamp(48px, 6vw, 84px); font-weight: 700; line-height: .95; letter-spacing: -.045em; }
+      .bs-gate p { margin: 0; max-width: 30ch; font-size: 19px; line-height: 1.5; color: rgba(238,241,248,.72); }
+      .bs-gate p b { color: #eef1f8; font-weight: 600; }
+      .bs-gate a { display: inline-flex; align-items: center; gap: 8px; margin-top: 30px; padding: 14px 20px; border-radius: 14px; font-size: 15px; font-weight: 600;
+        color: #eef1f8; text-decoration: none; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); }
+      .bs-gate a:hover { background: rgba(143,176,255,.16); border-color: #8fb0ff; }
+      .bs-gate figure { margin: 0; padding: 22px 22px 16px; border-radius: 28px; background: #fff; color: #0b1020; text-align: center; box-shadow: 0 30px 80px -30px #000; }
+      .bs-gate figure img { display: block; width: 240px; height: 240px; }
+      .bs-gate figcaption { margin-top: 12px; font-size: 14px; font-weight: 600; }
+      @media (max-width: 820px) { .bs-gate .in { grid-template-columns: 1fr; gap: 36px; justify-items: start; } }`;
+    document.head.append(st);
+    const g = document.createElement('div');
+    g.className = 'bs-gate'; g.setAttribute('role', 'dialog'); g.setAttribute('aria-label', 'Play on your phone');
+    g.innerHTML = `<div class="in"><div>${LOGOS_FULL}<small>The AI Blind Spot</small><h1>Play on your phone</h1>
+      <p>These games are made for <b>phones and tablets</b>. Scan the code with your camera to start.</p>
+      <a href="leaderboard.html">See the leaderboard and prizes →</a></div>
+      <figure><img src="icons/qr-play.svg" alt="QR code that opens the games"><figcaption>Scan to play</figcaption></figure></div>`;
+    document.body.append(g);
+  }
+  if (GATED) { if (document.body) showGate(); else document.addEventListener('DOMContentLoaded', showGate); }
+  const save = d => { if (!REMOTE) store.set(DB_KEY, d); };
   const pkey = p => (p.name.trim() + '|' + (p.company || '').trim()).toLowerCase();
 
   /* ---------- Sound (off by default) ---------- */
@@ -222,7 +347,7 @@
   }
 
   const BS = {
-    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL,
+    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED,
     ease: t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3),
     rr(c, x, y, w, h, r) {
       r = Math.min(r, w / 2, h / 2);
@@ -262,14 +387,20 @@
     setPlayer(name, company) {
       const p = { name: name.trim().slice(0, 24), company: company.trim().slice(0, 32) };
       store.set('bs_player', p);
-      // Keep a record of everyone who has signed in, so a returning player can pick themselves.
-      const d = db(), k = pkey(p), row = d.players[k] || (d.players[k] = { name: p.name, company: p.company, games: {} });
-      row.seen = Date.now(); save(d);
+      // Remember who has signed in on this device, so a returning player can pick themselves. This list stays on the
+      // device on purpose: with a shared leaderboard, listing everyone would let a player pick someone else's name.
+      const k = pkey(p), known = store.get(KNOWN_KEY, {});
+      known[k] = { name: p.name, company: p.company, seen: Date.now() };
+      store.set(KNOWN_KEY, known);
     },
-    /* Everyone known here, most recent first. With a hosted store this becomes the event's player list. */
+    /* Everyone who has signed in on this device, most recent first. */
     players() {
-      const d = db();
-      return Object.keys(d.players).map(k => ({ key: k, name: d.players[k].name, company: d.players[k].company, seen: d.players[k].seen || 0 }))
+      const known = store.get(KNOWN_KEY, {});
+      if (!REMOTE) { // earlier prototype data kept its players in bs_db_v2
+        const d = localDb();
+        for (const k in d.players) if (!known[k]) known[k] = { name: d.players[k].name, company: d.players[k].company, seen: d.players[k].seen || 0 };
+      }
+      return Object.keys(known).map(k => ({ key: k, name: known[k].name, company: known[k].company, seen: known[k].seen || 0 }))
         .sort((a, b) => b.seen - a.seen);
     },
     clearPlayer() { store.set('bs_player', { name: '', company: '' }); },
@@ -285,22 +416,29 @@
     },
     standing(id, p = this.player()) {
       const g = this.progress(id, p);
-      if (g.runs.length) {
-        const b = g.runs.reduce((a, r) => (r.score > a.score ? r : a));
-        return { score: b.score, stats: b.stats, source: 'ranked', runs: g.runs.length };
+      if (g.runs.length) { // best attempt; on a tie, the earlier one
+        const b = g.runs.reduce((a, r) => (r.score > a.score || (r.score === a.score && (r.at || 0) < (a.at || 0)) ? r : a));
+        return { score: b.score, stats: b.stats, at: b.at || 0, source: 'ranked', runs: g.runs.length };
       }
       return null;
     },
     best(id) { const s = this.standing(id); return s ? s.score : null; },
     record(id, mode, score, stats) {
-      const p = this.player(), d = db(), k = pkey(p);
-      const pl = d.players[k] || (d.players[k] = { name: p.name, company: p.company, games: {} });
-      pl.seen = Date.now();
-      const g = pl.games[id] || (pl.games[id] = { practice: null, runs: [] });
-      const prev = this.standing(id);
-      const run = { score: Math.round(score), stats, at: Date.now() };
-      g.runs.push(run);
-      save(d);
+      const p = this.player(), k = pkey(p), prev = this.standing(id);
+      const run = { id: uid(), score: Math.max(0, Math.round(score)), stats: stats || {}, at: Date.now() };
+      if (REMOTE) {
+        const q = store.get(QUEUE_KEY, []);
+        q.push({ id: run.id, player_key: k, name: p.name, company: p.company, game: id, score: run.score, stats: run.stats, at: run.at });
+        store.set(QUEUE_KEY, q);
+        sync.run();
+      } else {
+        const d = localDb();
+        const pl = d.players[k] || (d.players[k] = { name: p.name, company: p.company, games: {} });
+        pl.seen = Date.now();
+        const g = pl.games[id] || (pl.games[id] = { practice: null, runs: [] });
+        g.runs.push(run);
+        store.set(DB_KEY, d);
+      }
       const now = this.standing(id);
       return { run, prevBest: prev ? prev.score : null, standing: now };
     },
@@ -310,7 +448,7 @@
         const p = d.players[k], s = this.standing(id, p);
         if (s) rows.push({ key: k, name: p.name, company: p.company, ...s });
       }
-      return rows.sort((a, b) => b.score - a.score);
+      return rows.sort((a, b) => b.score - a.score || a.at - b.at); // ties: whoever got there first
     },
     /* Overall standing across all games. Each game is worth up to 1,000 points:
        the top score in a game gets 1,000 and every other score is scaled against it. */
@@ -319,13 +457,15 @@
       Object.keys(GAMES).forEach(id => {
         const b = this.board(id), top = b.length ? b[0].score : 0;
         b.forEach(r => {
-          const o = rows[r.key] || (rows[r.key] = { key: r.key, name: r.name, company: r.company, parts: {}, score: 0, played: 0 });
+          const o = rows[r.key] || (rows[r.key] = { key: r.key, name: r.name, company: r.company, parts: {}, score: 0, played: 0, at: 0 });
+          o.at = Math.max(o.at, r.at || 0);
           const pts = top > 0 ? Math.round(1000 * Math.max(0, r.score) / top) : 0;
           o.parts[id] = { pts, raw: r.score, source: r.source };
           o.score += pts; o.played++;
         });
       });
-      return Object.values(rows).sort((a, b) => b.score - a.score || b.played - a.played);
+      // ties: more games played first, then whoever set their scores earlier
+      return Object.values(rows).sort((a, b) => b.score - a.score || b.played - a.played || a.at - b.at);
     },
     pips(id, current) {
       const g = this.progress(id);
@@ -503,6 +643,16 @@
       const next = this.nextMode(id);
       $('#bs-epips').innerHTML = this.pips(id, next);
       $('#bs-next').textContent = next === 'done' ? 'See the full leaderboard' : `Play attempt ${this.progress(id).runs.length + 1} of ${MAX_RUNS}`;
+      this.paintEndBoard();
+      this.ovEnd.classList.add('show');
+      this.ovEnd.scrollTop = 0;
+      if (REMOTE && !this._endSync) { // when the shared leaderboard answers, redraw the standings on this card
+        this._endSync = true;
+        window.addEventListener('bs:sync', () => { if (this.ovEnd.classList.contains('show')) this.paintEndBoard(); });
+      }
+    },
+    paintEndBoard() {
+      const id = this.cfg.id, $ = s => this.ovEnd.querySelector(s);
       const board = this.board(id), me = pkey(this.player()), rank = board.findIndex(b => b.key === me) + 1;
       $('#bs-rank').textContent = rank ? `You're #${rank} of ${board.length}` : '';
       const li = (row, pos) => `<li class="${row.key === me ? 'me' : ''}"><span class="pos">${pos}</span><span class="nm">${esc(row.name)}<small>${esc(row.company)}</small></span><span class="sc">${fmt(row.score)}</span></li>`;
@@ -510,8 +660,6 @@
       let html = board.slice(0, TOP).map((row, i) => li(row, i + 1)).join('');
       if (rank > TOP) html += '<li class="gap">···</li>' + li(board[rank - 1], rank);
       $('#bs-lb').innerHTML = html;
-      this.ovEnd.classList.add('show');
-      this.ovEnd.scrollTop = 0;
     },
   };
   window.BS = BS;
