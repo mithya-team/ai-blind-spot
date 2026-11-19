@@ -1,7 +1,7 @@
 /* Shared shell for The AI Blind Spot games.
    - Player: asked once on the home page, remembered on this device.
-   - Rounds: one practice round, then 3 ranked attempts per game. Best ranked attempt counts;
-     if no ranked attempt was played, the practice score counts.
+   - Rounds: 3 scored attempts per game; the best one counts. (There used to be a practice round first.
+     Old saved data may still hold a `practice` entry; it is ignored.)
    - Intro card (what the game means), step-by-step tutorial, end screen with themed stats.
    - Sound: small Web Audio synth, off by default.
    Everything is stored on this device for now (bs_db_v2). Swap db()/save() for a hosted store later. */
@@ -281,7 +281,6 @@
     },
     nextMode(id) {
       const g = this.progress(id);
-      if (!g.practice) return 'practice';
       return g.runs.length < MAX_RUNS ? 'ranked' : 'done';
     },
     standing(id, p = this.player()) {
@@ -290,7 +289,6 @@
         const b = g.runs.reduce((a, r) => (r.score > a.score ? r : a));
         return { score: b.score, stats: b.stats, source: 'ranked', runs: g.runs.length };
       }
-      if (g.practice) return { score: g.practice.score, stats: g.practice.stats, source: 'practice', runs: 0 };
       return null;
     },
     best(id) { const s = this.standing(id); return s ? s.score : null; },
@@ -301,7 +299,7 @@
       const g = pl.games[id] || (pl.games[id] = { practice: null, runs: [] });
       const prev = this.standing(id);
       const run = { score: Math.round(score), stats, at: Date.now() };
-      if (mode === 'practice') g.practice = run; else g.runs.push(run);
+      g.runs.push(run);
       save(d);
       const now = this.standing(id);
       return { run, prevBest: prev ? prev.score : null, standing: now };
@@ -332,7 +330,7 @@
     pips(id, current) {
       const g = this.progress(id);
       const cell = (txt, done, cur, score) => `<div class="pip${done ? ' done' : ''}${cur ? ' cur' : ''}"><i></i><b>${txt}</b><small>${score != null ? fmt(score) : (cur ? 'Next' : '–')}</small></div>`;
-      let h = cell('Practice', !!g.practice, current === 'practice', g.practice && g.practice.score);
+      let h = '';
       for (let i = 0; i < MAX_RUNS; i++) {
         const r = g.runs[i];
         h += cell(`Attempt ${i + 1}`, !!r, current === 'ranked' && i === g.runs.length, r && r.score);
@@ -340,7 +338,6 @@
       return `<div class="pips">${h}</div>`;
     },
     modeLabel(id, mode) {
-      if (mode === 'practice') return 'Practice round';
       return `Attempt ${this.progress(id).runs.length + 1} of ${MAX_RUNS}`;
     },
 
@@ -424,7 +421,7 @@
       this.ovIntro.querySelector('#bs-how').style.display = this.seen ? '' : 'none';
       if (mode === 'done') { go.textContent = 'All attempts played'; go.disabled = true; }
       else if (!this.seen) go.textContent = 'How to play';
-      else go.textContent = mode === 'practice' ? 'Play practice round' : `Play attempt ${this.progress(id).runs.length + 1} of ${MAX_RUNS}`;
+      else go.textContent = `Play attempt ${this.progress(id).runs.length + 1} of ${MAX_RUNS}`;
       this.ovIntro.classList.add('show'); this.ovIntro.scrollTop = 0;
     },
     tutorial() {
@@ -442,7 +439,7 @@
         $('#bs-ttext').textContent = s.text;
         $('#bs-tdots').innerHTML = steps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('');
         $('#bs-tback').style.visibility = i ? 'visible' : 'hidden';
-        $('#bs-tnext').textContent = !last ? 'Next' : mode === 'practice' ? 'Play practice round' : mode === 'ranked' ? `Play attempt ${this.progress(this.cfg.id).runs.length + 1} of ${MAX_RUNS}` : 'Done';
+        $('#bs-tnext').textContent = !last ? 'Next' : mode === 'ranked' ? `Play attempt ${this.progress(this.cfg.id).runs.length + 1} of ${MAX_RUNS}` : 'Done';
         t0 = performance.now();
       };
       const loop = now => {
@@ -479,7 +476,7 @@
 
     /* r = { score, headline, theme, stats: { key: value }, win } */
     finish(r) {
-      const id = this.cfg.id, meta = GAMES[id], mode = this.mode || 'practice';
+      const id = this.cfg.id, meta = GAMES[id], mode = this.mode || 'ranked';
       const modeText = this.modeLabel(id, mode);
       const res = this.record(id, mode, r.score, r.stats || {});
       this.pill.classList.remove('show');
@@ -490,8 +487,7 @@
       countUp($('#bs-score'), 0, r.score, 1100, fmt, 250);
       const st = res.standing;
       let label, isBest = false;
-      if (mode === 'practice') label = 'Practice score. It counts until you play a ranked attempt.';
-      else if (res.run.score >= st.score) { label = 'Your best attempt · on the leaderboard'; isBest = true; }
+      if (res.run.score >= st.score) { label = 'Your best attempt · on the leaderboard'; isBest = true; }
       else label = `Your best attempt: ${fmt(st.score)}`;
       $('#bs-label').textContent = label;
       $('#bs-label').classList.toggle('best', isBest);
@@ -509,7 +505,7 @@
       $('#bs-next').textContent = next === 'done' ? 'See the full leaderboard' : `Play attempt ${this.progress(id).runs.length + 1} of ${MAX_RUNS}`;
       const board = this.board(id), me = pkey(this.player()), rank = board.findIndex(b => b.key === me) + 1;
       $('#bs-rank').textContent = rank ? `You're #${rank} of ${board.length}` : '';
-      const li = (row, pos) => `<li class="${row.key === me ? 'me' : ''}"><span class="pos">${pos}</span><span class="nm">${esc(row.name)}<small>${esc(row.company)}${row.source === 'practice' ? ' · practice' : ''}</small></span><span class="sc">${fmt(row.score)}</span></li>`;
+      const li = (row, pos) => `<li class="${row.key === me ? 'me' : ''}"><span class="pos">${pos}</span><span class="nm">${esc(row.name)}<small>${esc(row.company)}</small></span><span class="sc">${fmt(row.score)}</span></li>`;
       const TOP = 5;
       let html = board.slice(0, TOP).map((row, i) => li(row, i + 1)).join('');
       if (rank > TOP) html += '<li class="gap">···</li>' + li(board[rank - 1], rank);

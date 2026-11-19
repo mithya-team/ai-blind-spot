@@ -4,7 +4,7 @@ Short phone games and a leaderboard for **"The AI Blind Spot: Your AI Is Only as
 
 > **Status: five candidate games, three will ship.** The site currently carries five games so the internal team can vote. The event should show three. See [Choosing the final three](#choosing-the-final-three).
 
-People play on their own phones whenever they have a few minutes. They sign in with first name and company, play each game (one practice round, then three ranked attempts), and compete on a per-game and an overall leaderboard. The leaderboard can also be shown on a screen in the room.
+People play on their own phones whenever they have a few minutes. They sign in with first name and company, play each game (three attempts, best one counts), and compete on a per-game and an overall leaderboard. The leaderboard can also be shown on a screen in the room.
 
 - **Live site:** https://mithya-team.github.io/ai-blind-spot/
 - **Repository:** https://github.com/mithya-team/ai-blind-spot
@@ -77,10 +77,10 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
    - New players type first name and company (both required).
    - Returning players pick themselves from "Played before? Pick your name". The list filters as they type a first name.
    - If this device already has a signed-in player, the page skips straight to `games.html`.
-2. **`games.html`**: one card per game (tall columns on wide screens, one column on phones; with more than three games, all of them sit side by side from 1280 px and wrap three to a row below that). Each card shows progress (four dots: practice plus three attempts), the best score and the next action, for example "Play attempt 2 of 3". The header has "Playing as …", "Not you?" (which signs out) and the leaderboard link.
+2. **`games.html`**: one card per game (tall columns on wide screens, one column on phones; with more than three games, all of them sit side by side from 1280 px and wrap three to a row below that). Each card shows progress (three dots, one per attempt), the best score and the next action, for example "Play attempt 2 of 3". The header has "Playing as …", "Not you?" (which signs out) and the leaderboard link.
 3. **A game page.** The shared shell (in `common.js`) shows:
    1. **Intro card:** what the game means in terms of the roundtable's theme, round progress and the sound switch.
-   2. **Tutorial:** 4 or 5 animated steps, shown the first time only and replayable from "How to play". The last button reads "Play practice round".
+   2. **Tutorial:** 4 or 5 animated steps, shown the first time only and replayable from "How to play". The last button reads "Play attempt 1 of 3".
    3. **The round.**
    4. **Results card:** score, a one-line takeaway built from the round's stats, four stat tiles, round progress, the next button and the top 5.
 4. **`leaderboard.html`**: Overall plus one tab per game, with each row showing the game's themed stats.
@@ -94,8 +94,8 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
 | Rule | Detail |
 |---|---|
 | Identity | First name (max 24 chars) plus company (max 32). A player's key is `lower(name) + "\|" + lower(company)`. |
-| Rounds per game | 1 practice round, then 3 ranked attempts. After that the game is "Complete". |
-| Which score counts | The best ranked attempt. If the player has not played any ranked attempt, their practice score counts and is labelled "practice". A ranked attempt replaces the practice score even if it's lower (agreed with the client). |
+| Rounds per game | 3 attempts, all scored. After that the game is "Complete". There is no practice round: the tutorial teaches each game instead. |
+| Which score counts | The best of the player's attempts. |
 | Overall leaderboard | Each game is worth up to 1,000 points: the top score in that game gets 1,000 and everyone else gets `round(1000 × score / top)`. The overall score is the sum, so up to 3,000. Ties are broken by number of games played. Rows show "2 of 3 played" when someone skipped a game. Because it's relative, everyone's points in a game shift when that game's top score improves. |
 | Layout | Every player gets a random layout. A fixed shared layout was considered and rejected. |
 | Round length | Golden Thread and Clear Cut: 75 s. Deep Dive: until your light runs out or you reach the bottom (about 2.5 min at most). |
@@ -199,7 +199,7 @@ Then clear test data (see [Resetting a device](#resetting-a-device)). Deep Dive 
 | Helpers | `params`, `fmt`, `esc`, `pl`, `ease`, `rr`, `fit(canvas)`, `vibrate` |
 | Registry | `GAMES`, `MAX_RUNS`, `LOGOS` (square tiles), `LOGOS_FULL` (full logos) |
 | Player | `player()`, `hasPlayer()`, `setPlayer(name, company)`, `players()`, `clearPlayer()` |
-| Rounds | `progress(id)`, `nextMode(id)` (`'practice' \| 'ranked' \| 'done'`), `standing(id)`, `best(id)`, `record(id, mode, score, stats)` |
+| Rounds | `progress(id)`, `nextMode(id)` (`'ranked' \| 'done'`), `standing(id)`, `best(id)`, `record(id, mode, score, stats)` |
 | Leaderboards | `board(id)`, `overall()` |
 | Game shell | `init(cfg)`, `finish(result)`, `tutorial()`, `begin()`, `pips()`, `modeLabel()`, `drawHand()` |
 | Sound | `soundOn()`, `setSound(on)`, `sfx(name, opt)` |
@@ -242,7 +242,6 @@ Stored today in each browser's `localStorage`:
       "seen": 1794550000000,
       "games": {
         "golden-thread": {
-          "practice": { "score": 900, "stats": { "connected": 30, "longest": 7, "pictures": 1, "lost": 2 }, "at": 1794550000000 },
           "runs": [
             { "score": 1640, "stats": { "connected": 41, "longest": 9, "pictures": 2, "lost": 1 }, "at": 1794550100000 }
           ]
@@ -280,16 +279,15 @@ create table players (
 create table rounds (
   id         bigint generated always as identity primary key,
   player_key text not null references players(key) on delete cascade,
-  game       text not null check (game in ('golden-thread', 'deep-dive', 'clear-cut')),
-  mode       text not null check (mode in ('practice', 'ranked')),
+  game       text not null check (game in ('golden-thread', 'deep-dive', 'clear-cut', 'stack-up', 'vital-signs')),  -- trim to the final three
+  mode       text not null default 'ranked' check (mode = 'ranked'),
   score      integer not null check (score between 0 and 100000),
   stats      jsonb not null default '{}',
   created_at timestamptz not null default now()
 );
 create index on rounds (game, player_key);
 
--- Enforce the rules on the server: one practice and at most three ranked rounds per player per game.
-create unique index one_practice on rounds (player_key, game) where mode = 'practice';
+-- Enforce the rules on the server: at most three rounds per player per game.
 create or replace function max_three_ranked() returns trigger language plpgsql as $$
 begin
   if new.mode = 'ranked' and (select count(*) from rounds
@@ -428,7 +426,7 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
 - [ ] Tried on at least one iPhone and one Android, on the venue Wi-Fi if possible.
 - [ ] A QR code to the live URL printed for tables, cards or the screen.
 - [ ] Room screen showing `leaderboard.html?screen`. Use a browser in full-screen mode, keep the screen awake, and sign it out of any player so no row is highlighted.
-- [ ] Someone briefed to help people sign in, and to remind them the practice round doesn't block their best score.
+- [ ] Someone briefed to help people sign in, and to remind them that only their best of three attempts counts.
 - [ ] Export the results after the event, then delete the data.
 
 ---
@@ -452,7 +450,7 @@ These were settled with the client. Please don't undo them without checking.
 - **Games:** three games at the event, chosen by an internal vote from the five candidates above (the client's plan, November 2026).
 - **Wording:** games use OpenText's own terms: context and connected data, the six stack layers, the body analogy with context as oxygen, governed unstructured content. Deep Dive's meter is "context", not "light".
 - **Still true:** "Deep Dive" replaced "Back to 1964": the client felt no real company thinks about its information in decades, so the theme is **depth and layers**, never years or eras.
-- **Rounds:** one practice round, then three ranked attempts per game. Best attempt counts; practice counts only if no attempt was played.
+- **Rounds:** three attempts per game, best one counts, no practice round (changed 2026-11-19 to keep it simple; the tutorial teaches each game). Old saved data may hold a `practice` entry per game, which is ignored.
 - **Layouts:** random layout per player.
 - **Sign-in:**
   - Name and company are asked once, on the first page. Returning players pick themselves from a list.

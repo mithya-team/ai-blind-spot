@@ -131,9 +131,9 @@
   <nav class="tabs" id="tabs"></nav>
   <div class="head"><span class="cnt" id="cnt"></span></div>
   <ol id="rows"></ol>
-  <p class="note"><span id="how"></span>Each player's best attempt in a game counts. A practice score counts only until they play an attempt.<br>Prototype: this shows scores saved on this device.</p>
+  <p class="note"><span id="how"></span>Each player's best of three attempts in a game counts.<br>Prototype: this shows scores saved on this device.</p>
 </div>
-<script src="shared/common.js?v=15"></script>
+<script src="shared/common.js?v=16"></script>
 <script>
   const LOOK = {
     'golden-thread': { acc: '#f1d48a', ink: '#1a1405', wash: 'rgba(64,84,170,.5)', font: 'Inter, sans-serif', weight: 700, track: '-.03em', short: 'Thread' },
@@ -170,7 +170,7 @@
     rowsEl.classList.toggle('in', !!animate);
     rowsEl.innerHTML = rows.length ? rows.map((r, i) => `<li class="${r.key === me ? 'me' : ''} ${i < 3 ? 'p' + (i + 1) : ''}${all_ ? ' ov' : ''}" style="--i:${i}">
         <span class="pos">${i + 1}</span>
-        <span class="nm"><b><span>${BS.esc(r.name)}</span>${r.key === me ? '<i class="tagc you" style="font-style:normal">You</i>' : ''}${!all_ && r.source === 'practice' ? '<i class="tagc" style="font-style:normal">Practice</i>' : ''}${all_ && r.played < games.length ? `<i class="tagc" style="font-style:normal">${r.played} of ${games.length} played</i>` : ''}</b><small>${BS.esc(r.company)}</small>
+        <span class="nm"><b><span>${BS.esc(r.name)}</span>${r.key === me ? '<i class="tagc you" style="font-style:normal">You</i>' : ''}${all_ && r.played < games.length ? `<i class="tagc" style="font-style:normal">${r.played} of ${games.length} played</i>` : ''}</b><small>${BS.esc(r.company)}</small>
           ${all_ ? '' : `<span class="chips">${chips(r)}</span>`}</span>
         <span class="sc">${BS.fmt(r.score)}</span>${all_ ? `<span class="chips parts">${chips(r)}</span>` : ''}</li>`).join('')
       : `<div class="empty">No scores yet${all_ ? '' : ' for ' + g.title}.<br><a href="${all_ ? 'games.html' : g.href}">Be the first to play</a></div>`;

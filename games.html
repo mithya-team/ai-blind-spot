@@ -180,7 +180,7 @@
   </header>
   <div class="who mob"><span><i></i><b class="whoname"></b></span><button type="button" class="notme">Not you?</button></div>
   <div class="headrow">
-    <div><h1>Pick a game</h1><p class="sub">One practice round, then three attempts each. Your best attempt counts.</p></div>
+    <div><h1>Pick a game</h1><p class="sub">Three attempts at each game. Your best one counts.</p></div>
     <a class="standing" id="standing" href="leaderboard.html" hidden></a>
   </div>
   <div id="games">
@@ -283,7 +283,7 @@
   </div>
   <p class="note">Prototype: scores are saved on this device only for now.</p>
 </div>
-<script src="shared/common.js?v=15"></script>
+<script src="shared/common.js?v=16"></script>
 <script>
   if (!BS.hasPlayer()) location.replace('index.html');
   document.getElementById('logos').innerHTML = BS.LOGOS;
@@ -293,11 +293,11 @@
     document.querySelectorAll('.status').forEach(el => {
       const id = el.dataset.game, g = BS.progress(id), mode = BS.nextMode(id), b = BS.best(id), left = BS.MAX_RUNS - g.runs.length;
       let text, cta;
-      if (mode === 'practice') { text = 'Start with a practice round'; cta = 'Play practice round'; }
+      if (mode === 'ranked' && !g.runs.length) { text = 'Three attempts · best counts'; cta = 'Play attempt 1 of 3'; }
       else if (mode === 'ranked') { text = `${left} ${left === 1 ? 'attempt' : 'attempts'} left · Best ${BS.fmt(b)}`; cta = `Play attempt ${g.runs.length + 1} of ${BS.MAX_RUNS}`; }
       else { text = `Complete · Best ${BS.fmt(b)}`; cta = 'See your result'; }
-      const filled = (g.practice ? 1 : 0) + g.runs.length;
-      el.innerHTML = '<span class="d">' + [0, 1, 2, 3].map(i => `<i class="${i < filled ? 'on' : ''}"></i>`).join('') + '</span>' + BS.esc(text);
+      const filled = g.runs.length;
+      el.innerHTML = '<span class="d">' + [0, 1, 2].map(i => `<i class="${i < filled ? 'on' : ''}"></i>`).join('') + '</span>' + BS.esc(text);
       el.closest('.game').querySelector('.go b').textContent = cta;
     });
     const all = BS.overall(), rank = all.findIndex(r => r.key === me) + 1, st = document.getElementById('standing');

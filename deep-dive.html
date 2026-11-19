@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=15">
+<link rel="stylesheet" href="shared/common.css?v=16">
 <style>
   :root {
     --bg: #071521; --fg: #e3f6ff; --accent: #7fe3ff; --on-accent: #04121c;
@@ -21,7 +21,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/common.js?v=15"></script>
+<script src="shared/common.js?v=16"></script>
 <script>
 (() => {
   const cv = document.getElementById('c');
@@ -1322,7 +1322,7 @@
     id: 'deep-dive',
     tagline: 'Context is your AI\u2019s oxygen. How deep can it go before it runs out?',
     tutorial: TUTORIAL,
-    onStart: () => start(), // practice and ranked play the same
+    onStart: () => start(),
   });
   requestAnimationFrame(frame);
 })();

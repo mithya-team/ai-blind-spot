@@ -77,8 +77,8 @@ h1 { font-family: var(--font-display); font-weight: var(--display-weight, 600); 
 .meaning b { color: var(--accent); font-weight: 700; }
 .meaning span { opacity: .88; }
 
-/* ---- Round progress: practice + 3 attempts ---- */
-.pips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 14px; }
+/* ---- Round progress: 3 attempts ---- */
+.pips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 14px; }
 .pip i { display: block; height: 4px; border-radius: 2px; background: var(--line); margin-bottom: 7px; position: relative; overflow: hidden; }
 .pip b { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; opacity: .5; }
 .pip small { display: block; font-size: 13px; font-weight: 700; margin-top: 2px; font-variant-numeric: lining-nums tabular-nums; opacity: .4; }
