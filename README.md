@@ -63,6 +63,9 @@ leaderboard.html    Overall + one tab per game; ?screen = room display
 shared/common.js    Everything shared: players, rounds, scores, leaderboards, cards, tutorial, sound, logos
 shared/common.css   Styles for the shared cards (intro, tutorial, results)
 shared/ot-icon.png  OpenText "ot" icon (from their partner brand guide)
+icons/              Favicons and home-screen icon, made from the OpenText "ot" icon
+og/                 Share images (1200 x 630), one per page, for link previews
+tools/og/           Generator for the share images (see "Share images and icons")
 shared/ot-word.png  OpenText wordmark in white (rendered from their partner brand guide)
 README.md           This file
 ```
@@ -344,6 +347,23 @@ The Supabase JS client loads from a CDN with a plain `<script>` tag, so the no-b
 
 ---
 
+## Share images and icons
+
+Every page has a description, favicon tags and Open Graph / Twitter tags, so a link pasted into WhatsApp, Slack, LinkedIn or iMessage shows a preview card.
+
+- **Images:** `og/<page>.png`, 1200 x 630. Each game's image is real gameplay beside the title; the first page and games page are the real pages with the sign-in and personal details hidden; the leaderboard has a podium in the game colours.
+- **Tags:** `og:image` uses the full `https://mithya-team.github.io/ai-blind-spot/og/…` address (preview crawlers need absolute URLs). **If the site moves to a custom domain, update those addresses in every page** (search for `mithya-team.github.io`).
+- **Icons:** `icons/favicon.ico` (16/32/48), `icons/favicon-32.png`, `icons/icon-192.png` and `icons/apple-touch-icon.png` (180, square, for iPhone home screens), all from the OpenText "ot" icon. See the brand caveat below.
+- **Regenerating:** after the vote, or after any visual change, run the generator so the images match:
+
+  ```bash
+  python3 -m http.server 8791 --bind 127.0.0.1    # repo root, separate terminal
+  python3 tools/og/make.py                         # rewrites og/*.png
+  ```
+
+  It needs Python with Pillow, Node 20+, and Playwright's headless Chrome (`npx playwright install chromium-headless-shell`, or set `CHROME=` to a Chrome binary). Remove dropped games from `GAMES` in `tools/og/make.py` first, and delete their `og/*.png`.
+- **Caching:** WhatsApp, LinkedIn and Slack cache previews for days. After changing an image, give it a new file name (or add `?v=2` to the `og:image` URL) so the new one is picked up. LinkedIn's Post Inspector can force a refresh.
+
 ## Testing
 
 ### URL options
@@ -400,7 +420,7 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out wi
 
 | Sponsor | Used | Source today | Note |
 |---|---|---|---|
-| OpenText | "ot" tile (most pages) and icon plus wordmark (first page) | Taken and rendered from OpenText's partner brand guide (Aug 2025) | The guide says the "ot" icon should **not** be used separately from the wordmark. Ask OpenText whether the tile-only use is acceptable, or switch to the full logo everywhere. |
+| OpenText | "ot" tile (most pages) and icon plus wordmark (first page) | Taken and rendered from OpenText's partner brand guide (Aug 2025) | The guide says the "ot" icon should **not** be used separately from the wordmark. Ask OpenText whether the tile-only use is acceptable, or switch to the full logo everywhere. The **favicon and home-screen icon** are the same icon on its own, so include them in the question. |
 | AWS | Smile logo, as a tile and full | Simple Icons (SVG) | Use AWS's official co-marketing files if available. |
 | Capgemini | Spade tile and full wordmark | Wikimedia Commons (SVG) | Use Capgemini's official files if available. |
 
