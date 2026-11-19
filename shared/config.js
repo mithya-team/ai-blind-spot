@@ -15,11 +15,12 @@ window.BS_CONFIG = {
   allowSwitchPlayer: true,
 
   /* Prizes, shown on the leaderboard (phone, desktop and the TV). Places 1 to 3 are for the Overall leaderboard.
-     img is optional: a path such as 'prizes/whoop.jpg'. Without one, a drawn icon is shown. */
+     img is optional: a path, or two paths for an either/or prize. Product cutouts (transparent PNG) live in prizes/.
+     Without one, a drawn icon is shown. */
   prizes: [
-    { place: 1, label: '1st overall', title: 'Meta Ray-Ban glasses or a TUMI backpack', icon: 'glasses', img: '' },
-    { place: 2, label: '2nd overall', title: 'WHOOP band with a 1-year membership', icon: 'band', img: '' },
-    { place: 3, label: '3rd overall', title: 'LARQ self-cleaning bottle', icon: 'bottle', img: '' },
+    { place: 1, label: '1st overall', title: 'Meta Ray-Ban glasses or a TUMI backpack', icon: 'glasses', img: ['prizes/meta-rayban.png', 'prizes/tumi.png'] },
+    { place: 2, label: '2nd overall', title: 'WHOOP band with a 1-year membership', icon: 'band', img: 'prizes/whoop.png' },
+    { place: 3, label: '3rd overall', title: 'LARQ self-cleaning bottle', icon: 'bottle', img: 'prizes/larq.png' },
     { place: 0, label: 'Everyone who plays', title: 'Aviator socks', icon: 'socks', img: '' },
   ],
 };

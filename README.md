@@ -427,7 +427,7 @@ In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out. W
 ## Known limitations and open items
 
 - **Shared leaderboard not connected yet:** the code is in; it needs a Supabase project (see [Shared leaderboard](#shared-leaderboard)).
-- **Prize photos:** each prize shows a drawn icon until a photo is added (`img` in `shared/config.js`, files in `prizes/`).
+- **Prize photos:** `prizes/*.png` are product cutouts (transparent background) made from each brand's own product images: Ray-Ban Meta Wayfarer Gen 2 (ray-ban.com), TUMI Alpha Bravo Packable Backpack in Chalk (TUMI Hong Kong; the Thailand link had expired), WHOOP band and battery (whoop.com, which labels that shot as the 4.0, not the 5.0), LARQ Bottle PureVis 2 (livelarq.com). The socks still show a drawn icon. Set them with `img` in `shared/config.js`; two paths show an either/or prize side by side.
 - **"Not you?"** signs the device out; other players' saved data on that device stays.
 - **Deep Dive's internal axis** is still named in years (see above). It's harmless, but worth renaming if you touch that file.
 - **The overall score is relative**, so points shift as the top scores change. The alternative, points by finishing position, was discussed and not chosen.
