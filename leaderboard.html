@@ -134,7 +134,9 @@
     .wrap { max-width: none; padding: calc(36 * var(--u)) calc(56 * var(--u)) calc(44 * var(--u)); display: grid; grid-template-columns: minmax(0, 1fr) calc(360 * var(--u)); grid-template-areas: "top top" "main side"; column-gap: calc(32 * var(--u)); align-items: start; }
     .top { grid-area: top; flex-wrap: nowrap; gap: calc(18 * var(--u)); margin-bottom: calc(28 * var(--u)); }
     .top > #logos { padding-right: calc(18 * var(--u)); }
-    h1 { font-size: calc(34 * var(--u)); } h1 small { font-size: calc(11.5 * var(--u)); margin-bottom: calc(6 * var(--u)); }
+    /* One line, one size: "The AI Blind Spot" in blue, "Leaderboard" in white. */
+    h1 { display: flex; align-items: baseline; gap: .28em; font-size: calc(30 * var(--u)); white-space: nowrap; }
+    h1 small { display: inline; font-size: inherit; font-weight: 700; letter-spacing: inherit; text-transform: none; margin: 0; }
     .meta { flex: none; order: 0; margin-left: auto; gap: calc(12 * var(--u)); }
     .back { font-size: calc(13 * var(--u)); padding: calc(9 * var(--u)) calc(14 * var(--u)) calc(9 * var(--u)) calc(11 * var(--u)); }
     .back svg { width: calc(14 * var(--u)); height: calc(14 * var(--u)); }
