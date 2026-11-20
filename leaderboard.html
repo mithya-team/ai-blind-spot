@@ -131,7 +131,7 @@
 
   /* ---- Wide screens and TVs: a real table, prizes and the QR code on the right; everything scales with --u ---- */
   @media (min-width: 1100px) {
-    .wrap { max-width: none; padding: calc(36 * var(--u)) calc(56 * var(--u)) calc(44 * var(--u)); display: grid; grid-template-columns: minmax(0, 1fr) calc(380 * var(--u)); grid-template-areas: "top top" "main side"; column-gap: calc(40 * var(--u)); align-items: start; }
+    .wrap { max-width: none; padding: calc(36 * var(--u)) calc(56 * var(--u)) calc(44 * var(--u)); display: grid; grid-template-columns: minmax(0, 1fr) calc(360 * var(--u)); grid-template-areas: "top top" "main side"; column-gap: calc(32 * var(--u)); align-items: start; }
     .top { grid-area: top; flex-wrap: nowrap; gap: calc(18 * var(--u)); margin-bottom: calc(28 * var(--u)); }
     .top > #logos { padding-right: calc(18 * var(--u)); }
     h1 { font-size: calc(34 * var(--u)); } h1 small { font-size: calc(11.5 * var(--u)); margin-bottom: calc(6 * var(--u)); }
@@ -159,10 +159,10 @@
     .scan b { display: block; font-size: calc(19 * var(--u)); font-weight: 700; }
     .scan span { display: block; font-size: calc(13 * var(--u)); color: var(--dim); margin-top: calc(4 * var(--u)); line-height: 1.4; }
 
-    .thead, li { grid-template-columns: calc(52 * var(--u)) minmax(0, 1fr) repeat(var(--n), calc(112 * var(--u))) calc(124 * var(--u)); grid-template-areas: none; column-gap: calc(8 * var(--u)); }
+    .thead, li { grid-template-columns: calc(52 * var(--u)) minmax(0, 1fr) repeat(var(--n), calc(104 * var(--u))) calc(116 * var(--u)); grid-template-areas: none; column-gap: calc(8 * var(--u)); }
     /* Headings share the rows' padding and columns, and each label starts where its cell's text starts. */
     .thead { display: grid; align-items: center; padding: 0 calc(18 * var(--u)) calc(8 * var(--u)) calc(14 * var(--u)); }
-    .thead span, .thead button { display: block; font: inherit; font-size: calc(12.5 * var(--u)); font-weight: 700; line-height: calc(18 * var(--u)); padding: 0 0 calc(4 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .thead span, .thead button { display: block; font: inherit; font-size: calc(12 * var(--u)); font-weight: 700; line-height: calc(18 * var(--u)); padding: 0 0 calc(4 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .thead span { color: var(--faint); }
     .thead span.hash { width: calc(40 * var(--u)); text-align: center; }
     .thead button { width: 100%; text-align: left; padding-left: calc(10 * var(--u)); padding-right: calc(4 * var(--u)); border-radius: calc(8 * var(--u)); border: 0; background: none; cursor: pointer; color: var(--c); }
