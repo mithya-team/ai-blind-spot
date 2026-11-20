@@ -28,226 +28,220 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* Leaderboard: same night sky as the home page. One tab per game; each row carries that game's themed stats. */
+  /* Leaderboard: one table for everyone. Each game column shows points out of 1,000 (they add up to the total)
+     and the player's best score underneath. Tap a game's heading to rank by that game and see its themed stats.
+     Sizes are in --u: 1px on phones; on wide screens 1/1440 of the window width, so the page fills a laptop,
+     a 4K monitor or a TV the same way. ?screen is the TV: no controls, as many rows as fit, refreshes every 4 s. */
   :root {
     --ink: #070a13; --fg: #eef1f8; --dim: rgba(238,241,248,.64); --faint: rgba(238,241,248,.42);
-    --line: rgba(255,255,255,.11); --glass: rgba(255,255,255,.06); --acc: #f1d48a; --acc-ink: #1a1405;
-    --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-head: Inter, -apple-system, sans-serif; --font-game: var(--font-head);
-    color-scheme: dark;
+    --line: rgba(255,255,255,.11); --glass: rgba(255,255,255,.055); --gold: #f1d48a;
+    --u: 1px; color-scheme: dark;
   }
+  @media (min-width: 1100px) { :root { --u: calc(100vw / 1440); } }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   [hidden] { display: none !important; }
   html { background: var(--ink); }
-  body { min-height: 100vh; color: var(--fg); font-family: var(--font-ui); background: var(--ink); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
-  .sky { position: absolute; inset: 0 0 auto 0; height: 520px; overflow: hidden; pointer-events: none; }
-  .sky::before { content: ""; position: absolute; width: 620px; height: 620px; right: -250px; top: -320px; border-radius: 50%; background: radial-gradient(closest-side, transparent 55%, rgba(143,176,255,.3) 58%, rgba(143,176,255,.1) 68%, transparent 100%); }
-  .sky::after { content: ""; position: absolute; inset: 0; background: radial-gradient(520px 360px at 18% 0%, var(--wash, rgba(54,78,160,.42)), transparent 70%), linear-gradient(180deg, transparent 60%, var(--ink)); transition: background .4s; }
+  body { min-height: 100vh; color: var(--fg); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--ink); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+  .sky { position: absolute; inset: 0 0 auto 0; height: calc(560 * var(--u)); overflow: hidden; pointer-events: none; }
+  .sky::before { content: ""; position: absolute; width: calc(700 * var(--u)); height: calc(700 * var(--u)); right: calc(-260 * var(--u)); top: calc(-380 * var(--u)); border-radius: 50%; background: radial-gradient(closest-side, transparent 55%, rgba(143,176,255,.3) 58%, rgba(143,176,255,.1) 68%, transparent 100%); }
+  .sky::after { content: ""; position: absolute; inset: 0; background: radial-gradient(calc(560 * var(--u)) calc(380 * var(--u)) at 18% 0%, rgba(54,78,160,.42), transparent 70%), linear-gradient(180deg, transparent 60%, var(--ink)); }
+
   .wrap { position: relative; max-width: 560px; margin: 0 auto; padding: max(22px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 44px max(16px, env(safe-area-inset-left)); }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .bs-logos { display: inline-flex; gap: 7px; vertical-align: middle; }
-  .bs-lg { width: 32px; height: 32px; border-radius: 23%; overflow: hidden; display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 6px 14px -6px rgba(0,0,0,.7); }
+  .bs-logos { display: inline-flex; gap: calc(7 * var(--u)); vertical-align: middle; }
+  .bs-lg { width: calc(32 * var(--u)); height: calc(32 * var(--u)); border-radius: 23%; overflow: hidden; display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 6px 14px -6px rgba(0,0,0,.7); }
   .bs-ot img { display: block; width: 108%; height: 108%; margin: -4%; }
   .back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--fg); text-decoration: none; padding: 9px 13px 9px 10px; border-radius: 99px; background: var(--glass); border: 1px solid var(--line); }
   .back svg { width: 14px; height: 14px; }
-  h1 { font-family: var(--font-head); font-weight: 700; font-size: clamp(38px, 11.5vw, 50px); letter-spacing: -.04em; line-height: 1; margin: 30px 0 18px; }
+  .titlerow { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 28px 0 16px; }
+  h1 { font-weight: 700; font-size: clamp(38px, 11.5vw, 50px); letter-spacing: -.04em; line-height: 1; }
   h1 small { display: block; font-size: .3em; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #8fb0ff; margin: 0 0 10px 2px; }
+  .meta { display: flex; align-items: center; gap: 10px; flex: none; padding-bottom: 4px; }
+  .cnt { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+  .live { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px 5px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; background: rgba(94,224,160,.12); color: #8ff0c0; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: #5ee0a0; animation: ping 2s infinite; }
+  .live.off { background: rgba(255,196,107,.12); color: #ffc46b; } .live.off i { background: #ffc46b; animation: none; }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(94,224,160,.6); } 70%, 100% { box-shadow: 0 0 0 8px rgba(94,224,160,0); } }
 
-  .tabs { display: grid; grid-template-columns: repeat(var(--tabs, 4), 1fr); gap: 4px; padding: 4px; border-radius: 18px; background: var(--glass); border: 1px solid var(--line); margin-bottom: 18px; }
-  .tabs a { display: grid; place-items: center; text-align: center; padding: 9px 3px; min-height: 46px; border-radius: 14px; color: var(--dim); text-decoration: none; font-size: 12.5px; font-weight: 600; line-height: 1.15; transition: background .2s, color .2s; }
-  .tabs a.on { background: var(--acc); color: var(--acc-ink); box-shadow: 0 10px 22px -12px var(--acc); }
-
-  .head { display: flex; justify-content: flex-end; margin: -6px 4px 8px; min-height: 14px; }
-  .head h2 { font-family: var(--font-game); font-weight: var(--game-weight, 800); font-size: 30px; line-height: 1; letter-spacing: var(--game-track, -.03em); color: var(--acc); }
-  .head p { font-size: 13px; line-height: 1.4; color: var(--dim); margin-top: 6px; max-width: 34ch; text-wrap: pretty; }
-  .head .cnt { flex: none; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); padding-bottom: 2px; }
-
-  ol { list-style: none; display: grid; gap: 7px; }
-  li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center; padding: 13px 16px 13px 12px; border-radius: 18px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
-  .in li { animation: rise .55s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i) * 45ms); }
-  @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
-  .pos { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; color: var(--dim); background: rgba(255,255,255,.05); }
-  li.p1 { padding-top: 16px; padding-bottom: 16px; background: linear-gradient(120deg, rgba(255,255,255,.13), rgba(255,255,255,.05)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
-  li.p1 .pos { background: linear-gradient(150deg, #fff3c9, #e2b64d 55%, #b88422); color: #2a1c02; box-shadow: 0 0 0 3px rgba(226,182,77,.2); }
-  li.p2 .pos { background: linear-gradient(150deg, #fff, #c3cbd9 55%, #8b95a8); color: #1a2030; }
-  li.p3 .pos { background: linear-gradient(150deg, #ffd9b8, #cf8a52 55%, #96592a); color: #2a1503; }
-  li.me { box-shadow: inset 0 0 0 1.5px var(--acc); }
-  .nm { min-width: 0; }
-  .nm b { display: flex; align-items: center; gap: 7px; font-size: 16px; font-weight: 600; }
-  .nm b span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .nm small { display: block; font-size: 12.5px; color: var(--dim); margin-top: 1px; }
-  .tagc { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.12); color: var(--dim); }
-  .tagc.you { background: var(--acc); color: var(--acc-ink); }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-  .chips span i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
-  .chips span.none { opacity: .45; }
-  .chips span { font-size: 11.5px; line-height: 1; padding: 5px 8px; border-radius: 8px; background: rgba(255,255,255,.07); color: var(--dim); white-space: nowrap; }
-  /* Overall tab: one small tile per game */
-  li.ov .pos { grid-row: 1 / 3; }
-  .chips.parts { display: grid; grid-template-columns: repeat(var(--pn, 3), minmax(0, 1fr)); grid-column: 2 / -1; margin-top: 0; }
-  .chips.parts span { padding: 6px 6px 7px 7px; font-size: 10px; font-weight: 600; letter-spacing: .01em; color: var(--c); overflow: hidden; text-overflow: ellipsis; }
-  .chips.parts span i { display: none; }
-  .chips.parts b { display: block; margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
-  .sc { font-family: var(--font-head); font-size: 22px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; text-align: right; }
-  li.p1 .sc { font-size: 27px; color: var(--acc); }
-  .empty { padding: 34px 20px; text-align: center; border-radius: 20px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); color: var(--dim); font-size: 14.5px; line-height: 1.5; }
-  .empty a { display: inline-block; margin-top: 14px; padding: 12px 18px; border-radius: 12px; background: var(--acc); color: var(--acc-ink); font-weight: 700; text-decoration: none; }
-  .note { font-size: 12px; color: var(--faint); text-align: center; margin-top: 20px; line-height: 1.6; }
-
-  /* Wide screens (not the room display): stats sit beside the name, so more rows fit. */
-  @media (min-width: 900px) {
-    html:not(.screen) .wrap { max-width: 1060px; padding-top: 30px; }
-    html:not(.screen) h1 { font-size: 66px; margin: 40px 0 22px; }
-    html:not(.screen) .tabs a { font-size: 15px; min-height: 50px; }
-    html:not(.screen) .head h2 { font-size: 38px; } html:not(.screen) .head p { font-size: 15px; max-width: 70ch; }
-    html:not(.screen) li { grid-template-columns: 40px 1fr auto; gap: 16px; padding: 12px 24px 12px 14px; }
-    html:not(.screen) .pos { width: 40px; height: 40px; font-size: 16px; }
-    html:not(.screen) .nm { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; column-gap: 20px; }
-    html:not(.screen) .nm b { grid-column: 1; font-size: 18px; } html:not(.screen) .nm small { grid-column: 1; font-size: 13.5px; }
-    html:not(.screen) .chips { grid-column: 2; grid-row: 1 / 3; margin-top: 0; justify-content: flex-end; gap: 5px; }
-    html:not(.screen) .chips span { font-size: 12.5px; padding: 7px 10px; }
-    html:not(.screen) li.ov { grid-template-columns: 40px 1fr auto auto; }
-    html:not(.screen) li.ov .pos { grid-row: auto; }
-    html:not(.screen) .tabs { grid-template-columns: repeat(var(--tabsw, 4), 1fr); }
-    html:not(.screen) .chips.parts { grid-template-columns: repeat(var(--n, 3), auto); grid-column: 3; grid-row: 1; }
-    html:not(.screen) .chips.parts span { font-size: 11.5px; font-weight: 500; color: var(--dim); padding: 7px 12px 8px; }
-    html:not(.screen) .chips.parts span i { display: inline-block; }
-    html:not(.screen) .chips.parts b { font-size: 17px; }
-    html:not(.screen) li.ov .sc { grid-column: 4; grid-row: 1; }
-    html:not(.screen) .sc { font-size: 26px; min-width: 110px; } html:not(.screen) li.p1 .sc { font-size: 31px; }
-  }
-  @media (prefers-reduced-motion: reduce) { .in li, .live i { animation: none; } }
   /* ---- Prizes ---- */
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "prizes" "nudge" "tabs" "head" "rows" "note"; }
-  .layout > h1 { grid-area: title; } .layout > .tabs { grid-area: tabs; } .layout > .head { grid-area: head; } .layout > ol { grid-area: rows; } .layout > .note { grid-area: note; }
-  .side { display: contents; }
-  .prizes { grid-area: prizes; margin: 0 0 14px; padding: 16px 16px 8px; border-radius: 22px; background: linear-gradient(160deg, rgba(241,212,138,.12), rgba(255,255,255,.04) 55%); box-shadow: inset 0 0 0 1px rgba(241,212,138,.22); }
-  .prizes h2 { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #f1d48a; margin: 0 2px 10px; }
+  .prizes { margin: 0 0 16px; padding: 16px 16px 8px; border-radius: 22px; background: linear-gradient(160deg, rgba(241,212,138,.12), rgba(255,255,255,.04) 55%); box-shadow: inset 0 0 0 1px rgba(241,212,138,.22); }
+  .prizes h2 { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); margin: 0 2px 10px; }
   .prizes h2 svg { width: 15px; height: 15px; }
   .prize { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; padding: 8px 0; }
   .prize:has(.two) { grid-template-columns: 108px 1fr; }
   .prize + .prize { border-top: 1px solid var(--line); }
-  .pv { position: relative; width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; background: rgba(255,255,255,.07); color: #f6dc98; overflow: visible; }
-  .pv img { width: 100%; height: 100%; object-fit: contain; }
-  /* Product photos sit on a light tile: most of the prizes are black. */
-  .pv.photo { background: radial-gradient(circle at 50% 38%, #ffffff, #dfe4ee 75%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+  .pv { position: relative; width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; background: rgba(255,255,255,.07); color: #f6dc98; }
+  .pv svg { width: 62%; height: 62%; }
+  .pv.photo { background: radial-gradient(circle at 50% 38%, #fff, #dfe4ee 75%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
   .pv.photo img { position: absolute; inset: 8%; width: 84%; height: 84%; object-fit: contain; filter: drop-shadow(0 3px 4px rgba(10,16,32,.25)); }
   .pv.two { width: 108px; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 0 6px; }
   .pv.two img { position: static; width: auto; min-width: 0; flex: 1 1 0; height: 78%; }
   .pv.two i { flex: none; font-style: normal; font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6b7280; }
-  .pv svg { width: 62%; height: 62%; }
-  .pv .md { position: absolute; left: -5px; top: -5px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; box-shadow: 0 0 0 2px var(--ink); }
-  .md.m1 { background: linear-gradient(150deg, #fff3c9, #e2b64d 55%, #b88422); color: #2a1c02; }
-  .md.m2 { background: linear-gradient(150deg, #fff, #c3cbd9 55%, #8b95a8); color: #1a2030; }
-  .md.m3 { background: linear-gradient(150deg, #ffd9b8, #cf8a52 55%, #96592a); color: #2a1503; }
-  .pt { min-width: 0; }
+  .md { position: absolute; left: -5px; top: -5px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; box-shadow: 0 0 0 2px var(--ink); }
+  .m1 { background: linear-gradient(150deg, #fff3c9, #e2b64d 55%, #b88422); color: #2a1c02; }
+  .m2 { background: linear-gradient(150deg, #fff, #c3cbd9 55%, #8b95a8); color: #1a2030; }
+  .m3 { background: linear-gradient(150deg, #ffd9b8, #cf8a52 55%, #96592a); color: #2a1503; }
+  .prize.all .pv { color: #a9c1ff; }
   .pt small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
   .pt b { display: block; font-size: 15px; font-weight: 600; line-height: 1.3; margin-top: 2px; }
   .pt em { display: block; font-style: normal; font-size: 12.5px; color: var(--dim); margin-top: 3px; }
-  .pt em i { font-style: normal; color: #f1d48a; font-weight: 600; }
-  .prize.all .pv { color: #a9c1ff; }
-  .nudge { grid-area: nudge; display: flex; justify-content: space-between; gap: 10px; align-items: center; margin: 0 0 14px; padding: 11px 14px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); font-size: 13.5px; color: var(--dim); text-decoration: none; }
-  .nudge b { color: var(--fg); font-weight: 600; }
+  .pt em i { font-style: normal; color: var(--gold); font-weight: 600; }
   .scan { display: none; }
-  .live { display: inline-flex; align-items: center; gap: 7px; margin-left: 14px; padding: 5px 10px 5px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; vertical-align: middle; background: rgba(94,224,160,.12); color: #8ff0c0; }
-  .live i { width: 8px; height: 8px; border-radius: 50%; background: #5ee0a0; box-shadow: 0 0 0 0 rgba(94,224,160,.6); animation: ping 2s infinite; }
-  .live.off { background: rgba(255,196,107,.12); color: #ffc46b; } .live.off i { background: #ffc46b; animation: none; }
-  @keyframes ping { 70% { box-shadow: 0 0 0 8px rgba(94,224,160,0); } 100% { box-shadow: 0 0 0 0 rgba(94,224,160,0); } }
-  h1 .live { font-size: 11px; letter-spacing: .14em; }
 
-  /* Wide screens: leaderboard on the left, prizes and the QR code on the right. */
+  /* ---- Sorting (phones: a row of chips; wide screens: the column headings) ---- */
+  .sort { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 12px; padding: 0 16px; }
+  .sort::-webkit-scrollbar { display: none; }
+  .sort button { flex: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--dim); padding: 8px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; }
+  .sort button i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--c); }
+  .sort button.on { color: #0b1020; background: var(--c, #eef1f8); border-color: transparent; }
+  .sort button.on i { background: #0b1020; opacity: .5; }
+
+  /* ---- Rows: phones get cards ---- */
+  .thead { display: none; }
+  ol { list-style: none; display: grid; gap: 8px; }
+  li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; grid-template-areas: "pos who tot" "stats stats stats" "games games games"; column-gap: 12px; row-gap: 10px; align-items: center; padding: 13px 14px 12px 12px; border-radius: 18px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
+  .in li { animation: rise .55s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i) * 35ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+  .pos { grid-area: pos; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; color: var(--dim); background: rgba(255,255,255,.05); }
+  li.p1 .pos { background: linear-gradient(150deg, #fff3c9, #e2b64d 55%, #b88422); color: #2a1c02; box-shadow: 0 0 0 3px rgba(226,182,77,.2); }
+  li.p2 .pos { background: linear-gradient(150deg, #fff, #c3cbd9 55%, #8b95a8); color: #1a2030; }
+  li.p3 .pos { background: linear-gradient(150deg, #ffd9b8, #cf8a52 55%, #96592a); color: #2a1503; }
+  li.p1 { background: linear-gradient(120deg, rgba(255,255,255,.12), rgba(255,255,255,.045)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
+  .who { grid-area: who; min-width: 0; }
+  .who b { display: block; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who small { display: block; font-size: 12.5px; color: var(--dim); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chips { grid-area: stats; display: flex; flex-wrap: wrap; gap: 4px; margin-top: -2px; }
+  .chips i { font-style: normal; font-size: 11px; font-weight: 700; color: var(--c); padding: 5px 2px; }
+  .chips span { font-size: 11.5px; line-height: 1; padding: 5px 8px; border-radius: 8px; background: rgba(255,255,255,.07); color: var(--dim); white-space: nowrap; }
+  .tot { grid-area: tot; text-align: right; font-size: 22px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .tot small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-top: 1px; }
+  li.p1 .tot { color: var(--gold); font-size: 25px; }
+  .games { grid-area: games; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 4px; }
+  .g { position: relative; padding: 6px 4px 6px 7px; border-radius: 9px; background: rgba(255,255,255,.05); min-width: 0; }
+  .g .lbl { display: block; font-size: 9.5px; font-weight: 700; color: var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .g b { display: block; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .g small { display: none; }
+  .g.none b { color: var(--faint); font-weight: 500; }
+  .g.lead { background: color-mix(in srgb, var(--c) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent); }
+  .g .crown { position: absolute; right: 4px; top: 4px; width: 11px; height: 11px; color: var(--c); }
+  .g.sorted { box-shadow: inset 0 0 0 1.5px var(--c); }
+  .empty { padding: 34px 20px; text-align: center; border-radius: 20px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); color: var(--dim); font-size: 14.5px; line-height: 1.5; }
+  .note { font-size: 12px; color: var(--faint); text-align: center; margin-top: 20px; line-height: 1.6; }
+
+  /* ---- Wide screens and TVs: a real table, prizes and the QR code on the right; everything scales with --u ---- */
   @media (min-width: 1100px) {
-    html:not(.screen) .wrap { max-width: 1400px; }
-    .layout { grid-template-columns: minmax(0, 1fr) 360px; column-gap: 36px; grid-template-areas: "title side" "nudge side" "tabs side" "head side" "rows side" "note side"; align-items: start; }
-    .side { display: block; grid-area: side; position: sticky; top: 24px; margin-top: 40px; }
-    .side .prizes { margin: 0; padding: 22px 22px 12px; }
-    .side .prize { grid-template-columns: 78px 1fr; } .side .pv { width: 78px; height: 78px; border-radius: 16px; }
-    .side .prize:has(.two) { grid-template-columns: 132px 1fr; } .side .pv.two { width: 132px; }
-    .scan { display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: center; margin-top: 14px; padding: 14px; border-radius: 22px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
-    .scan img { width: 112px; height: 112px; padding: 8px; border-radius: 14px; background: #fff; }
-    .scan b { display: block; font-size: 18px; font-weight: 700; }
-    .scan span { display: block; font-size: 13px; color: var(--dim); margin-top: 4px; line-height: 1.4; }
+    .wrap { max-width: none; padding: calc(36 * var(--u)) calc(56 * var(--u)) calc(44 * var(--u)); display: grid; grid-template-columns: minmax(0, 1fr) calc(380 * var(--u)); grid-template-areas: "top top" "main side"; column-gap: calc(40 * var(--u)); align-items: start; }
+    .top { grid-area: top; }
+    .back { font-size: calc(13 * var(--u)); padding: calc(9 * var(--u)) calc(14 * var(--u)) calc(9 * var(--u)) calc(11 * var(--u)); }
+    .back svg { width: calc(14 * var(--u)); height: calc(14 * var(--u)); }
+    main { grid-area: main; min-width: 0; }
+    .side { grid-area: side; margin-top: calc(28 * var(--u)); position: sticky; top: calc(20 * var(--u)); }
+    .titlerow { margin: calc(26 * var(--u)) 0 calc(22 * var(--u)); }
+    h1 { font-size: calc(66 * var(--u)); }
+    h1 small { margin-bottom: calc(12 * var(--u)); }
+    .meta { gap: calc(12 * var(--u)); }
+    .cnt { font-size: calc(12 * var(--u)); }
+    .live { font-size: calc(11 * var(--u)); padding: calc(5 * var(--u)) calc(11 * var(--u)) calc(5 * var(--u)) calc(9 * var(--u)); gap: calc(7 * var(--u)); }
+    .live i { width: calc(8 * var(--u)); height: calc(8 * var(--u)); }
+    .sort { display: none; }
+    .prizes { margin: 0; padding: calc(22 * var(--u)) calc(22 * var(--u)) calc(10 * var(--u)); border-radius: calc(24 * var(--u)); }
+    .prizes h2 { font-size: calc(11.5 * var(--u)); gap: calc(8 * var(--u)); margin: 0 calc(2 * var(--u)) calc(10 * var(--u)); }
+    .prizes h2 svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
+    .prize { grid-template-columns: calc(78 * var(--u)) 1fr; gap: calc(14 * var(--u)); padding: calc(10 * var(--u)) 0; }
+    .prize:has(.two) { grid-template-columns: calc(132 * var(--u)) 1fr; }
+    .pv { width: calc(78 * var(--u)); height: calc(78 * var(--u)); border-radius: calc(16 * var(--u)); }
+    .pv.two { width: calc(132 * var(--u)); gap: calc(3 * var(--u)); padding: 0 calc(7 * var(--u)); }
+    .pv.two i { font-size: calc(8.5 * var(--u)); }
+    .md { width: calc(22 * var(--u)); height: calc(22 * var(--u)); font-size: calc(12 * var(--u)); left: calc(-6 * var(--u)); top: calc(-6 * var(--u)); }
+    .pt small { font-size: calc(10.5 * var(--u)); } .pt b { font-size: calc(16 * var(--u)); margin-top: calc(2 * var(--u)); } .pt em { font-size: calc(13 * var(--u)); margin-top: calc(3 * var(--u)); }
+    .scan { display: grid; grid-template-columns: calc(112 * var(--u)) 1fr; gap: calc(16 * var(--u)); align-items: center; margin-top: calc(14 * var(--u)); padding: calc(14 * var(--u)); border-radius: calc(24 * var(--u)); background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
+    .scan img { width: calc(112 * var(--u)); height: calc(112 * var(--u)); padding: calc(8 * var(--u)); border-radius: calc(14 * var(--u)); background: #fff; }
+    .scan b { display: block; font-size: calc(19 * var(--u)); font-weight: 700; }
+    .scan span { display: block; font-size: calc(13 * var(--u)); color: var(--dim); margin-top: calc(4 * var(--u)); line-height: 1.4; }
+
+    .thead, li { grid-template-columns: calc(52 * var(--u)) minmax(0, 1fr) repeat(var(--n), calc(104 * var(--u))) calc(128 * var(--u)); grid-template-areas: none; column-gap: calc(8 * var(--u)); }
+    .thead { display: grid; align-items: end; padding: 0 calc(18 * var(--u)) calc(10 * var(--u)) calc(14 * var(--u)); }
+    .thead span { font-size: calc(11 * var(--u)); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+    .thead button { font: inherit; text-align: left; padding: calc(6 * var(--u)) calc(8 * var(--u)); margin: 0 calc(-2 * var(--u)); border-radius: calc(8 * var(--u)); border: 0; background: none; cursor: pointer; font-size: calc(12 * var(--u)); font-weight: 700; line-height: 1.2; color: var(--c); }
+    .thead button:hover { background: rgba(255,255,255,.06); }
+    .thead button.on { background: color-mix(in srgb, var(--c) 18%, transparent); box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--c); }
+    .thead button.tot { text-align: right; color: var(--fg); }
+    .thead button.tot.on { background: none; box-shadow: none; }
+    ol { gap: calc(7 * var(--u)); }
+    li { padding: calc(10 * var(--u)) calc(18 * var(--u)) calc(10 * var(--u)) calc(14 * var(--u)); border-radius: calc(18 * var(--u)); row-gap: 0; min-height: calc(66 * var(--u)); }
+    .pos, .who, .tot { grid-area: auto; }
+    .games { display: contents; }
+    .pos { width: calc(40 * var(--u)); height: calc(40 * var(--u)); font-size: calc(16 * var(--u)); }
+    .who b { font-size: calc(18 * var(--u)); } .who small { font-size: calc(13 * var(--u)); margin-top: calc(1 * var(--u)); }
+    /* ranked by one game: that game's themed stats on a line of their own under the row */
+    .chips { grid-area: auto; grid-column: 2 / -1; grid-row: 2; display: flex; flex-wrap: wrap; gap: calc(5 * var(--u)); margin: calc(8 * var(--u)) 0 calc(2 * var(--u)); }
+    .chips i { font-size: calc(11.5 * var(--u)); padding: calc(5 * var(--u)) calc(4 * var(--u)) calc(5 * var(--u)) 0; }
+    .chips span { font-size: calc(12 * var(--u)); padding: calc(5 * var(--u)) calc(9 * var(--u)); border-radius: calc(8 * var(--u)); }
+    .g { padding: calc(7 * var(--u)) calc(10 * var(--u)); border-radius: calc(10 * var(--u)); background: none; }
+    .g .lbl { display: none; }
+    .g b { font-size: calc(20 * var(--u)); margin: 0; }
+    .g small { display: block; font-size: calc(11 * var(--u)); color: var(--faint); margin-top: calc(2 * var(--u)); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .g .crown { width: calc(13 * var(--u)); height: calc(13 * var(--u)); right: calc(6 * var(--u)); top: calc(6 * var(--u)); }
+    .g.sorted:not(.lead) { box-shadow: inset 0 0 0 calc(1.5 * var(--u)) color-mix(in srgb, var(--c) 60%, transparent); }
+    .tot { font-size: calc(26 * var(--u)); } li.p1 .tot { font-size: calc(30 * var(--u)); }
+    .tot small { display: none; }
+    .empty { font-size: calc(15 * var(--u)); padding: calc(40 * var(--u)); border-radius: calc(20 * var(--u)); }
+    .note { font-size: calc(12 * var(--u)); margin-top: calc(22 * var(--u)); }
   }
 
-  /* The TV in the room (?screen): Overall only, no tabs, prizes and a big QR code on the right. */
+  /* ---- The TV: no controls, fixed height, as many rows as fit ---- */
   .screen body { overflow: hidden; }
-  .screen .wrap { max-width: none; height: 100vh; padding: 2vw 3vw; display: flex; flex-direction: column; }
-  .screen .top .bs-lg { width: 2.6vw; height: 2.6vw; min-width: 36px; min-height: 36px; }
-  .screen .layout { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) 30vw; column-gap: 2.6vw; grid-template-areas: "title side" "rows side"; grid-template-rows: auto 1fr; align-items: start; }
-  .screen .tabs, .screen .head, .screen .nudge, .screen .note, .screen .back { display: none; }
-  .screen h1 { font-size: 3.2vw; margin: 1vw 0 1.1vw; }
-  .screen h1 small { font-size: .26em; }
-  .screen h1 .live { font-size: .8vw; padding: .35vw .8vw .35vw .6vw; }
-  .screen .side { display: flex; flex-direction: column; gap: 1.2vw; grid-area: side; height: 100%; position: static; margin: 0; }
-  .screen .side .prizes { margin: 0; padding: 1.6vw 1.6vw .8vw; border-radius: 1.6vw; }
-  .screen .prizes h2 { font-size: .85vw; margin-bottom: .8vw; } .screen .prizes h2 svg { width: 1.1vw; height: 1.1vw; }
-  .screen .prize { grid-template-columns: 5.4vw 1fr; gap: 1.1vw; padding: .75vw 0; }
-  .screen .prize:has(.two) { grid-template-columns: 9vw 1fr; }
-  .screen .pv.photo { padding: .45vw; } .screen .pv.two i { font-size: .6vw; }
-  .screen .pv { width: 5.4vw; height: 5.4vw; border-radius: 1.2vw; }
-  .screen .pv.two { width: 9vw; }
-  .screen .pv .md { width: 1.7vw; height: 1.7vw; font-size: .95vw; left: -.5vw; top: -.5vw; }
-  .screen .pt small { font-size: .8vw; } .screen .pt b { font-size: 1.35vw; } .screen .pt em { font-size: 1vw; }
-  .screen .scan { display: grid; grid-template-columns: 9vw 1fr; gap: 1.4vw; align-items: center; margin: 0; padding: 1.2vw; border-radius: 1.6vw; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
-  .screen .scan img { width: 9vw; height: 9vw; padding: .6vw; border-radius: 1vw; background: #fff; }
-  .screen .scan b { display: block; font-size: 1.9vw; font-weight: 700; letter-spacing: -.02em; }
-  .screen .scan span { display: block; font-size: 1vw; color: var(--dim); margin-top: .4vw; line-height: 1.4; }
-  .screen ol { gap: .45vw; }
-  .screen li { padding: .5vw 1.6vw .5vw 1vw; border-radius: 1.1vw; gap: 1.1vw; grid-template-columns: 2.7vw 1fr auto auto; }
-  .screen li.p1 { padding-top: .7vw; padding-bottom: .7vw; }
-  .screen .pos { width: 2.7vw; height: 2.7vw; font-size: 1.2vw; }
-  .screen .nm { display: block; } .screen .nm b { font-size: 1.4vw; } .screen .nm small { font-size: .95vw; }
-  .screen .chips.parts { grid-template-columns: repeat(var(--n, 3), 6.4vw); gap: .35vw; grid-column: 3; grid-row: 1; }
-  .screen .chips.parts span { font-size: .78vw; padding: .45vw .6vw .5vw; border-radius: .6vw; font-weight: 600; color: var(--c); }
-  .screen .chips.parts span i { display: none; }
-  .screen .chips.parts b { font-size: 1.15vw; margin-top: .15vw; }
-  .screen .sc { font-size: 2.2vw; min-width: 8vw; } .screen li.p1 .sc { font-size: 2.6vw; }
-  .screen .tagc { font-size: .6vw; padding: .15vw .4vw; }
-  .screen .empty { font-size: 1.3vw; padding: 3vw; border-radius: 1.4vw; } .screen .empty a { display: none; }
+  .screen .wrap { height: 100vh; grid-template-rows: auto 1fr; padding-bottom: calc(28 * var(--u)); }
+  .screen main { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+  .screen ol { flex: 1; min-height: 0; overflow: hidden; align-content: start; }
+  .screen .back, .screen .note, .screen .sort { display: none !important; }
+  .screen .thead button { cursor: default; pointer-events: none; }
+  .screen .titlerow { margin-top: calc(16 * var(--u)); }
+  @media (prefers-reduced-motion: reduce) { .in li, .live i { animation: none; } }
 </style>
 </head>
 <body>
 <div class="sky" aria-hidden="true"></div>
 <div class="wrap">
-  <div class="top"><span id="logos"></span><a class="back" href="games.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>All games</a></div>
-  <div class="layout">
-    <h1><small>The AI Blind Spot</small>Leaderboard<span class="live" id="live" hidden><i></i><span></span></span></h1>
-    <aside class="side">
-      <section class="prizes" id="prizes" aria-label="Prizes"></section>
-      <div class="scan"><img src="icons/qr-play.svg" alt="QR code that opens the games"><div><b>Scan to play</b><span>Point your phone's camera at the code. Three quick games, three attempts each.</span></div></div>
-    </aside>
-    <a class="nudge" id="nudge" href="games.html" hidden></a>
-    <nav class="tabs" id="tabs"></nav>
-    <div class="head"><span class="cnt" id="cnt"></span></div>
+  <div class="top"><span id="logos"></span><a class="back" id="back" href="games.html" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>All games</a></div>
+  <main>
+    <div class="titlerow">
+      <h1><small>The AI Blind Spot</small>Leaderboard</h1>
+      <div class="meta"><span class="cnt" id="cnt"></span><span class="live" id="live" hidden><i></i><span></span></span></div>
+    </div>
+    <section class="prizes m" id="prizesM" aria-label="Prizes"></section>
+    <div class="sort" id="sort" role="tablist" aria-label="Rank by"></div>
+    <div class="thead" id="thead"></div>
     <ol id="rows"></ol>
-    <p class="note"><span id="how"></span>Each player's best of three attempts in a game counts. On a tie, whoever got there first ranks higher.<br><span id="mode"></span></p>
-  </div>
+    <p class="note" id="note"></p>
+  </main>
+  <aside class="side">
+    <section class="prizes" id="prizesD" aria-label="Prizes"></section>
+    <div class="scan"><img src="icons/qr-play.svg" alt="QR code that opens the games"><div><b>Scan to play</b><span>Point your phone's camera at the code. Three quick games, three attempts each.</span></div></div>
+  </aside>
 </div>
-<script src="shared/config.js?v=18"></script>
-<script src="shared/common.js?v=17"></script>
+<script src="shared/config.js?v=19"></script>
+<script src="shared/common.js?v=19"></script>
 <script>
   const LOOK = {
-    'golden-thread': { acc: '#f1d48a', ink: '#1a1405', wash: 'rgba(64,84,170,.5)', short: 'Thread' },
-    'deep-dive': { acc: '#9eeaff', ink: '#04202c', wash: 'rgba(28,110,150,.5)', short: 'Deep Dive' },
-    'clear-cut': { acc: '#d9ccff', ink: '#1d1640', wash: 'rgba(120,96,200,.42)', short: 'Clear Cut' },
-    'stack-up': { acc: '#8ff0c0', ink: '#04251a', wash: 'rgba(30,120,90,.45)', short: 'Stack Up' },
-    'vital-signs': { acc: '#ffa3b6', ink: '#2a0a16', wash: 'rgba(150,50,90,.42)', short: 'Vitals' },
-    overall: { acc: '#a9c1ff', ink: '#081238', wash: 'rgba(54,78,160,.42)' },
+    'stack-up': { acc: '#8ff0c0', short: 'Stack Up' },
+    'vital-signs': { acc: '#ffa3b6', short: 'Vitals' },
+    'golden-thread': { acc: '#f1d48a', short: 'Thread' },
+    'deep-dive': { acc: '#9eeaff', short: 'Dive' },
+    'clear-cut': { acc: '#d9ccff', short: 'Clear Cut' },
   };
-  const games = Object.keys(BS.GAMES), ids = ['overall', ...games], screen = BS.params.has('screen');
+  const games = Object.keys(BS.GAMES), screen = BS.params.has('screen'), wideQ = matchMedia('(min-width: 1100px)');
   const rowsEl = document.getElementById('rows');
-  const wide = () => screen || matchMedia('(min-width: 900px)').matches;
+  document.documentElement.style.setProperty('--n', games.length);
   document.getElementById('logos').innerHTML = BS.LOGOS;
   if (screen) document.documentElement.classList.add('screen');
-  { // tab and tile counts follow the number of games: phones wrap the tabs into rows of three once there are more than four
-    const rs = document.documentElement.style;
-    rs.setProperty('--n', games.length); rs.setProperty('--pn', Math.min(3, games.length));
-    rs.setProperty('--tabs', ids.length > 4 ? 3 : ids.length); rs.setProperty('--tabsw', ids.length);
-  }
-  const cur = () => screen ? 'overall' : ids.includes(location.hash.slice(1)) ? location.hash.slice(1) : ids[0];
-  const me = () => { const p = BS.player(); return (p.name + '|' + p.company).toLowerCase(); };
+  // "All games" only where the games can be played: phones and tablets, or a computer the team has unlocked.
+  document.getElementById('back').hidden = screen || !(BS.touch || BS.unlocked);
+  // Prizes sit on the right on wide screens and above the table on phones; only one copy is shown.
+  const syncPrizePlace = () => { document.getElementById('prizesM').hidden = wideQ.matches; document.getElementById('prizesD').hidden = !wideQ.matches; };
+  wideQ.addEventListener('change', syncPrizePlace); syncPrizePlace();
 
-  /* Prizes come from shared/config.js. Places 1 to 3 show who currently holds them on the Overall leaderboard. */
+  const by = () => { const h = location.hash.slice(1); return !screen && games.includes(h) ? h : 'total'; };
   const ICON = {
     glasses: '<path d="M2.5 10.5h7v3.2a3 3 0 0 1-3 3h-1a3 3 0 0 1-3-3zM14.5 10.5h7v3.2a3 3 0 0 1-3 3h-1a3 3 0 0 1-3-3zM9.5 11.5c1.6-1 3.4-1 5 0M2.5 10.5l1.8-3.5M21.5 10.5l-1.8-3.5"/>',
     band: '<rect x="7.5" y="7" width="9" height="10" rx="3"/><path d="M9 7V3.5h6V7M9 17v3.5h6V17M10.5 12h1.2l.8-1.6 1 3.2.8-1.6h.7"/>',
@@ -256,63 +250,84 @@
     gift: '<rect x="3.5" y="9" width="17" height="11.5" rx="1.5"/><path d="M3.5 13h17M12 9v11.5M12 9c-1.5-3.5-5.5-4-5.5-1.5S10 9 12 9zM12 9c1.5-3.5 5.5-4 5.5-1.5S14 9 12 9z"/>',
   };
   const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k] || ICON.gift}</svg>`;
-  function paintPrizes() {
-    const all = BS.overall(), list = BS.CFG.prizes || [];
-    const el = document.getElementById('prizes');
-    if (!list.length) { el.hidden = true; return; }
-    el.innerHTML = `<h2>${svg('gift')}Prizes</h2>` + list.map(p => {
+  const CROWN = '<svg class="crown" viewBox="0 0 24 24" fill="currentColor" aria-label="Top score in this game"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>';
+
+  function paintPrizes(all) {
+    const list = BS.CFG.prizes || [];
+    const html = list.length ? `<h2>${svg('gift')}Prizes</h2>` + list.map(p => {
       const holder = p.place > 0 ? all[p.place - 1] : null;
       const lead = p.place > 0 ? (holder ? `Now: <i>${BS.esc(holder.name)}</i> · ${BS.esc(holder.company)}` : 'Up for grabs') : '';
       const imgs = [].concat(p.img || []).filter(Boolean);
-      const vis = imgs.length ? imgs.map(src => `<img src="${BS.esc(src)}" alt="" loading="lazy">`).join(imgs.length > 1 ? '<i>or</i>' : '') : svg(p.icon);
+      const vis = imgs.length ? imgs.map(src => `<img src="${BS.esc(src)}" alt="">`).join(imgs.length > 1 ? '<i>or</i>' : '') : svg(p.icon);
       return `<div class="prize${p.place > 0 ? '' : ' all'}"><div class="pv${imgs.length ? ' photo' : ''}${imgs.length > 1 ? ' two' : ''}">${vis}${p.place > 0 ? `<span class="md m${p.place}">${p.place}</span>` : ''}</div>
         <div class="pt"><small>${BS.esc(p.label)}</small><b>${BS.esc(p.title)}</b>${lead ? `<em>${lead}</em>` : ''}</div></div>`;
-    }).join('');
-  }
-  function paintNudge() {
-    const n = document.getElementById('nudge'), all = BS.overall(), r = all.findIndex(x => x.key === me()) + 1;
-    n.hidden = screen || !BS.hasPlayer() || !r;
-    if (n.hidden) return;
-    const third = all[2], gap = r > 3 && third ? third.score - all[r - 1].score : 0;
-    n.innerHTML = r <= 3 ? `<span>You're <b>#${r} overall</b>, in the prizes</span><b>Keep it →</b>`
-      : `<span>You're <b>#${r} overall</b>, ${BS.fmt(gap + 1)} pts from 3rd</span><b>Play →</b>`;
+    }).join('') : '';
+    for (const id of ['prizesM', 'prizesD']) document.getElementById(id).innerHTML = html;
   }
   function paintLive() {
     const el = document.getElementById('live'), s = BS.sync;
-    el.hidden = !s.remote;
-    if (!s.remote) return;
+    el.hidden = !s.remote || BS.demo;
+    if (el.hidden) return;
     el.classList.toggle('off', s.state === 'offline');
     el.querySelector('span').textContent = s.state === 'offline' ? 'Reconnecting' : 'Live';
   }
 
   function render(animate) {
-    const id = cur(), all_ = id === 'overall', g = all_ ? null : BS.GAMES[id], L = LOOK[id];
-    const st = document.documentElement.style;
-    st.setProperty('--acc', L.acc); st.setProperty('--acc-ink', L.ink); st.setProperty('--wash', L.wash);
-    document.getElementById('tabs').innerHTML = ids.map(k => `<a href="#${k}" class="${k === id ? 'on' : ''}">${k === 'overall' ? 'Overall' : BS.GAMES[k].title}</a>`).join('');
-    document.getElementById('how').innerHTML = all_ ? 'Overall: each game is worth up to 1,000 points, scaled against that game\'s top score. The prizes go by Overall.<br>' : '';
-    document.getElementById('mode').textContent = BS.sync.remote ? '' : 'Prototype: this shows scores saved on this device.';
-    const all = all_ ? BS.overall() : BS.board(id), rows = all.slice(0, screen ? 8 : 50), mine = me();
-    const chips = r => all_
-      ? games.map(k => { const part = r.parts[k]; return `<span class="${part ? '' : 'none'}" style="--c:${LOOK[k].acc}"><i style="background:${LOOK[k].acc}"></i>${wide() && !screen ? BS.GAMES[k].title : LOOK[k].short}<b>${part ? BS.fmt(part.pts) : '–'}</b></span>`; }).join('')
-      : g.line(r.stats || {}).split(' · ').map(c => `<span>${BS.esc(c)}</span>`).join('');
+    const sort = by(), all = BS.overall();
+    const boards = {}; for (const g of games) boards[g] = BS.board(g); // per game, best first; board rows carry the themed stats
+    const stat = (g, key) => boards[g].find(r => r.key === key);
+    let rows = all.map((r, i) => ({ ...r, rank: i + 1 }));
+    if (sort !== 'total') { // rank by one game: its players first, in that game's order; everyone else after, unranked
+      const order = new Map(boards[sort].map((r, i) => [r.key, i]));
+      rows.sort((a, b) => (order.has(a.key) ? order.get(a.key) : 1e9) - (order.has(b.key) ? order.get(b.key) : 1e9) || b.score - a.score);
+      rows = rows.map(r => ({ ...r, rank: order.has(r.key) ? order.get(r.key) + 1 : null }));
+    }
+    const leader = {}; for (const g of games) leader[g] = boards[g][0] && boards[g][0].key;
+
     document.getElementById('cnt').textContent = all.length ? BS.pl(all.length, 'player') : '';
+    const sortBtns = [['total', 'Total', '#eef1f8'], ...games.map(g => [g, BS.GAMES[g].title, LOOK[g].acc])];
+    document.getElementById('sort').innerHTML = sortBtns.map(([k, t, c]) => `<button type="button" role="tab" data-k="${k}" class="${k === sort ? 'on' : ''}" style="--c:${c}" aria-selected="${k === sort}">${k === 'total' ? '' : '<i></i>'}${t}</button>`).join('');
+    document.getElementById('thead').innerHTML = `<span>#</span><span>Player</span>` +
+      games.map(g => `<button type="button" data-k="${g}" class="${g === sort ? 'on' : ''}" style="--c:${LOOK[g].acc}" title="Rank by ${BS.GAMES[g].title}">${BS.GAMES[g].title}</button>`).join('') +
+      `<button type="button" data-k="total" class="tot${sort === 'total' ? ' on' : ''}" title="Rank by total">Total</button>`;
+
+    const limit = screen ? 30 : 100;
     rowsEl.classList.toggle('in', !!animate);
-    rowsEl.innerHTML = rows.length ? rows.map((r, i) => `<li class="${r.key === mine && !screen ? 'me' : ''} ${i < 3 ? 'p' + (i + 1) : ''}${all_ ? ' ov' : ''}" style="--i:${i}">
-        <span class="pos">${i + 1}</span>
-        <span class="nm"><b><span>${BS.esc(r.name)}</span>${r.key === mine && !screen ? '<i class="tagc you" style="font-style:normal">You</i>' : ''}${all_ && r.played < games.length ? `<i class="tagc" style="font-style:normal">${r.played} of ${games.length} played</i>` : ''}</b><small>${BS.esc(r.company)}</small>
-          ${all_ ? '' : `<span class="chips">${chips(r)}</span>`}</span>
-        <span class="sc">${BS.fmt(r.score)}</span>${all_ ? `<span class="chips parts">${chips(r)}</span>` : ''}</li>`).join('')
-      : `<div class="empty">No scores yet${all_ ? '' : ' for ' + g.title}.<br>${screen ? 'Scan the code to be the first.' : `<a href="${all_ ? 'games.html' : g.href}">Be the first to play</a>`}</div>`;
-    paintPrizes(); paintNudge(); paintLive();
+    rowsEl.innerHTML = rows.length ? rows.slice(0, limit).map((r, i) => {
+      const st = sort !== 'total' ? stat(sort, r.key) : null;
+      const cells = games.map(g => {
+        const part = r.parts[g], lead = leader[g] === r.key;
+        return `<span class="g${part ? '' : ' none'}${lead ? ' lead' : ''}${g === sort ? ' sorted' : ''}" style="--c:${LOOK[g].acc}"><span class="lbl">${LOOK[g].short}</span>${lead ? CROWN : ''}<b>${part ? BS.fmt(part.pts) : '–'}</b>${part ? `<small>best ${BS.fmt(part.raw)}</small>` : ''}</span>`;
+      }).join('');
+      const medal = r.rank && r.rank <= 3 ? ' p' + r.rank : '';
+      return `<li class="${medal}" style="--i:${i}"><span class="pos">${r.rank || '–'}</span>
+        <span class="who"><b>${BS.esc(r.name)}</b><small>${BS.esc(r.company)}</small></span>
+        ${st ? `<span class="chips" style="--c:${LOOK[sort].acc}"><i>${BS.esc(BS.GAMES[sort].title)}</i>${BS.GAMES[sort].line(st.stats || {}).split(' · ').map(c => `<span>${BS.esc(c)}</span>`).join('')}</span>` : ''}
+        <span class="games">${cells}</span>
+        <span class="tot">${BS.fmt(r.score)}<small>total</small></span></li>`;
+    }).join('') : `<div class="empty">No scores yet.${screen ? ' Scan the code to be the first.' : ''}</div>`;
+
+    document.getElementById('note').innerHTML = (sort === 'total' ? 'Each game is worth up to 1,000 points: the top score in a game gets 1,000 and everyone else is scaled against it. The prizes go by the total.' : `Ranked by ${BS.esc(BS.GAMES[sort].title)}. Tap Total to go back.`) +
+      ' Small figures are each player\'s best score. On a tie, whoever got there first ranks higher.' +
+      (BS.demo ? '<br>Showing invented sample players (?demo).' : BS.sync.remote ? '' : '<br>Prototype: this shows scores saved on this device.');
+    paintPrizes(all); paintLive();
+    if (screen) fitRows();
   }
+  // TV: show only whole rows that fit the screen.
+  function fitRows() {
+    const box = rowsEl.getBoundingClientRect().bottom;
+    [...rowsEl.children].forEach(li => { li.hidden = false; });
+    for (const li of [...rowsEl.children]) if (li.getBoundingClientRect().bottom > box + 1) li.hidden = true;
+  }
+  const pick = e => { const b = e.target.closest('button[data-k]'); if (!b || screen) return; const k = b.dataset.k; history.replaceState(null, '', k === 'total' ? location.pathname + location.search : '#' + k); render(true); };
+  document.getElementById('sort').addEventListener('click', pick);
+  document.getElementById('thead').addEventListener('click', pick);
   window.addEventListener('hashchange', () => render(true));
-  let wasWide = wide();
-  window.addEventListener('resize', () => { if (wide() !== wasWide) { wasWide = wide(); render(false); } });
+  window.addEventListener('resize', () => { if (screen) fitRows(); });
   window.addEventListener('bs:sync', () => render(false));
   render(true);
-  if (BS.sync.remote) BS.sync.every(screen ? 4000 : 8000); // the shared leaderboard: pick up new scores
-  else if (screen) setInterval(() => render(false), 4000);
+  if (BS.sync.remote && !BS.demo) BS.sync.every(screen ? 4000 : 8000);
+  else if (screen && !BS.demo) setInterval(() => render(false), 4000);
 </script>
 </body>
 </html>

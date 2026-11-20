@@ -42,6 +42,40 @@
 
   /* ---------- Game registry: what each game means, and which stats it reports ---------- */
   const GAMES = {
+    'stack-up': {
+      title: 'Stack Up', href: 'stack-up.html',
+      blurb: 'Build the six layers of your AI stack. Every layer is only as wide as the one beneath it.',
+      meaning: [
+        ['The stack', 'Six layers, bottom to top: infrastructure, systems of record, context, language models, orchestration, agents.'],
+        ['The cut', 'Whatever overhangs the layer below is lost. No layer can be wider than the one it stands on.'],
+        ['Context', 'The blue layer, Context & Connected Data, is the oxygen. Models and agents are only as strong as it is.'],
+        ['The body', 'Skeleton, vital organs, oxygen, brain, nervous system, muscles: one for each layer.'],
+      ],
+      stats: [
+        { k: 'stacks', l: 'Full stacks built' },
+        { k: 'context', l: 'Context layer width', unit: '%' },
+        { k: 'perfect', l: 'Perfect drops' },
+        { k: 'collapses', l: 'Stacks collapsed', bad: true },
+      ],
+      line: s => `${pl(s.stacks || 0, 'stack')} · context ${s.context == null ? '–' : fmt(s.context) + '%'} · ${pl(s.collapses || 0, 'collapse')}`,
+    },
+    'vital-signs': {
+      title: 'Vital Signs', href: 'vital-signs.html',
+      blurb: 'Context is the oxygen of AI. Keep the brain, nerves and muscles breathing.',
+      meaning: [
+        ['The body', 'Your AI. The brain is its models, the nervous system is orchestration, the muscles are its agents.'],
+        ['Oxygen', 'Governed context. Every part uses it up as it works, and stalls without it.'],
+        ['Raw content', 'Unstructured and ungoverned: emails, files, records. Tap to govern it and it becomes oxygen.'],
+        ['Stalls', 'A part that runs out of oxygen stops. Feed it raw content and it chokes.'],
+      ],
+      stats: [
+        { k: 'oxygen', l: 'Average oxygen level', unit: '%' },
+        { k: 'fed', l: 'Context delivered' },
+        { k: 'governed', l: 'Raw content governed' },
+        { k: 'stalls', l: 'Stalls', bad: true },
+      ],
+      line: s => `Oxygen ${fmt(s.oxygen || 0)}% · ${fmt(s.fed || 0)} delivered · ${pl(s.stalls || 0, 'stall')}`,
+    },
     'golden-thread': {
       title: 'Golden Thread', href: 'golden-thread.html',
       blurb: 'Connect scattered, unstructured content into one answer. Keep clear of the blind spots.',
@@ -92,40 +126,6 @@
       ],
       line: s => `${pl(s.cleared || 0, 'barrier')} cleared · ${fmt(s.approved || 0)} approved · ${pl(s.breaches || 0, 'breach', 'breaches')}`,
     },
-    'stack-up': {
-      title: 'Stack Up', href: 'stack-up.html',
-      blurb: 'Build the six layers of your AI stack. Every layer is only as wide as the one beneath it.',
-      meaning: [
-        ['The stack', 'Six layers, bottom to top: infrastructure, systems of record, context, language models, orchestration, agents.'],
-        ['The cut', 'Whatever overhangs the layer below is lost. No layer can be wider than the one it stands on.'],
-        ['Context', 'The blue layer, Context & Connected Data, is the oxygen. Models and agents are only as strong as it is.'],
-        ['The body', 'Skeleton, vital organs, oxygen, brain, nervous system, muscles: one for each layer.'],
-      ],
-      stats: [
-        { k: 'stacks', l: 'Full stacks built' },
-        { k: 'context', l: 'Context layer width', unit: '%' },
-        { k: 'perfect', l: 'Perfect drops' },
-        { k: 'collapses', l: 'Stacks collapsed', bad: true },
-      ],
-      line: s => `${pl(s.stacks || 0, 'stack')} · context ${s.context == null ? '–' : fmt(s.context) + '%'} · ${pl(s.collapses || 0, 'collapse')}`,
-    },
-    'vital-signs': {
-      title: 'Vital Signs', href: 'vital-signs.html',
-      blurb: 'Context is the oxygen of AI. Keep the brain, nerves and muscles breathing.',
-      meaning: [
-        ['The body', 'Your AI. The brain is its models, the nervous system is orchestration, the muscles are its agents.'],
-        ['Oxygen', 'Governed context. Every part uses it up as it works, and stalls without it.'],
-        ['Raw content', 'Unstructured and ungoverned: emails, files, records. Tap to govern it and it becomes oxygen.'],
-        ['Stalls', 'A part that runs out of oxygen stops. Feed it raw content and it chokes.'],
-      ],
-      stats: [
-        { k: 'oxygen', l: 'Average oxygen level', unit: '%' },
-        { k: 'fed', l: 'Context delivered' },
-        { k: 'governed', l: 'Raw content governed' },
-        { k: 'stalls', l: 'Stalls', bad: true },
-      ],
-      line: s => `Oxygen ${fmt(s.oxygen || 0)}% · ${fmt(s.fed || 0)} delivered · ${pl(s.stalls || 0, 'stall')}`,
-    },
   };
 
   /* ---------- Data ----------
@@ -166,7 +166,34 @@
     }
     return d;
   };
-  const db = () => REMOTE ? sharedDb() : localDb();
+  /* ?demo (leaderboard): a full room of invented players, to show the page before anyone has played. Never saved. */
+  const DEMO = params.has('demo');
+  const demoDb = () => {
+    let seed = 11; const r = () => (seed = seed * 16807 % 2147483647) / 2147483647, ri = (a, b) => Math.round(a + r() * (b - a));
+    const people = ['Ava|Northbank', 'Liam|Halden Group', 'Noor|Meridian Health', 'Theo|Corvel Energy', 'Maya|Aster Logistics', 'Ravi|Brightwater',
+      'Chloe|Kestrel Insurance', 'Jonas|Orbis Retail', 'Ines|Lumen Pharma', 'Sam|Trellis Foods', 'Yuki|Vantage Steel', 'Leo|Solent Air',
+      'Zara|Harbor Mutual', 'Dev|Pinecrest', 'Mila|Atlas Mobility', 'Owen|Cobalt Telecom', 'Sara|Ridgeway', 'Ben|Northstar Media'];
+    const make = {
+      'stack-up': () => { const st = { stacks: ri(0, 5), context: ri(55, 100), perfect: ri(0, 14), collapses: ri(0, 3) }; return [ri(300, 2600), st]; },
+      'vital-signs': () => { const st = { oxygen: ri(40, 92), fed: ri(10, 48), governed: ri(2, 20), stalls: ri(0, 3) }; return [ri(500, 2800), st]; },
+      'golden-thread': () => { const st = { connected: ri(12, 60), longest: ri(3, 12), pictures: ri(0, 4), lost: ri(0, 5) }; return [ri(400, 2600), st]; },
+      'deep-dive': () => { const L = ri(1, 6); const st = { depth: ri(L * 1000 - 900, L * 1000 + 100), layers: L, layerName: LAYERS[L - 1], docs: ri(1, 24), hits: ri(0, 6) }; return [ri(700, 5200), st]; },
+      'clear-cut': () => { const st = { cleared: ri(8, 70), approved: ri(0, 12), combo: ri(2, 7), breaches: ri(0, 3) }; return [ri(250, 1600), st]; },
+    };
+    const d = { players: {} };
+    people.forEach((pc, i) => {
+      const [name, company] = pc.split('|'), games = {};
+      for (const id in make) {
+        if (i > 4 && r() < .2) continue; // some people skip a game
+        const runs = [];
+        for (let j = 0, n = ri(1, 3); j < n; j++) { const [score, stats] = make[id](); runs.push({ id: `demo-${i}-${id}-${j}`, score, stats, at: 1e12 + i * 997 + j }); }
+        games[id] = { runs };
+      }
+      d.players[pc.toLowerCase()] = { name, company, games };
+    });
+    return d;
+  };
+  const db = () => DEMO ? demoDb() : REMOTE ? sharedDb() : localDb();
 
   /* ---------- Shared leaderboard (Supabase REST, no SDK) ----------
      flush() sends queued rounds; pull() fetches every player and round. Rounds carry a client id, so a retry after a
@@ -232,7 +259,8 @@
 
   /* ---------- Phones and tablets only ----------
      On a computer (no touchscreen) every page but the leaderboard is covered by a "scan to play" screen.
-     ?desktop lets the team test on a laptop and is remembered on that browser (?desktop=0 undoes it).
+     For the team: on that screen, type the word "play" on the keyboard to unlock this browser for good (nothing on
+     screen hints at it). ?desktop does the same from any address, and ?desktop=0 locks the browser again.
      ?auto, ?tut and ?debug are developer options and skip the screen too. */
   if (params.get('desktop') === '0') store.set('bs_desktop', false); else if (params.has('desktop')) store.set('bs_desktop', true);
   const page = (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '') || 'index';
@@ -271,6 +299,12 @@
       <a href="leaderboard.html">See the leaderboard and prizes →</a></div>
       <figure><img src="icons/qr-play.svg" alt="QR code that opens the games"><figcaption>Scan to play</figcaption></figure></div>`;
     document.body.append(g);
+    let typed = '';
+    document.addEventListener('keydown', e => { // the team's shortcut: type "play"
+      if (e.key.length !== 1) return;
+      typed = (typed + e.key.toLowerCase()).slice(-4);
+      if (typed === 'play') { store.set('bs_desktop', true); location.reload(); }
+    });
   }
   if (GATED) { if (document.body) showGate(); else document.addEventListener('DOMContentLoaded', showGate); }
   const save = d => { if (!REMOTE) store.set(DB_KEY, d); };
@@ -347,7 +381,7 @@
   }
 
   const BS = {
-    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED,
+    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED, touch, demo: DEMO, unlocked: store.get('bs_desktop', false),
     ease: t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3),
     rr(c, x, y, w, h, r) {
       r = Math.min(r, w / 2, h / 2);

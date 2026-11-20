@@ -91,11 +91,18 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
    2. **Tutorial:** 4 or 5 animated steps, shown the first time only and replayable from "How to play". The last button reads "Play attempt 1 of 3".
    3. **The round.**
    4. **Results card:** score, a one-line takeaway built from the round's stats, four stat tiles, round progress, the next button and the top 5.
-4. **`leaderboard.html`**: the prizes, a "You're #5 overall, 120 pts from 3rd" line for the signed-in player, then Overall plus one tab per game, each row showing the game's themed stats. On wide screens the prizes and a "Scan to play" QR code sit in a column on the right. `?screen` is the TV layout (below).
+4. **`leaderboard.html`**: one table for everyone, no tabs and no "you" highlighting (it's a public display).
+   - **Columns:** rank, player, one column per game, total. Each game cell shows the player's **points out of 1,000** (these add up to the total) and their **best score** underneath. The top player in each game gets a crown and a tinted cell.
+   - **Ranking by one game:** tap a game's column heading (on phones, the chips above the list) to rank by that game; each row then shows that game's themed stats. Tap Total to go back.
+   - **Prizes** sit on the right on wide screens, above the list on phones, each showing who holds that place now. Wide screens also show a "Scan to play" QR code.
+   - **Scaling:** below 1,100 px wide the rows are cards. From 1,100 px every size is in `--u` (1/1440 of the window width), so the page fills a laptop, a large monitor, a 4K screen or a TV the same way.
+   - **`?screen`** is the TV: no controls, as many whole rows as fit, refreshes every 4 s.
+   - **`?demo`** fills it with invented players (never saved), to show the page before anyone has played.
+   - **"All games"** only appears where games can be played: phones, tablets, or a computer the team has unlocked.
 
-**Phones and tablets only.** On a device without a touchscreen, every page except the leaderboard is covered by a "Play on your phone" screen with a QR code and a link to the leaderboard (`showGate()` in `common.js`). Detection is by touch (`any-pointer: coarse` or `maxTouchPoints > 1`), not width, so tablets in landscape and iPads (which report themselves as Macs) still play. Add `?desktop` to any address to play on a computer anyway, for testing; it's remembered in that browser, and `?desktop=0` undoes it. `?auto`, `?tut` and `?debug` also skip the screen.
+**Phones and tablets only.** On a device without a touchscreen, every page except the leaderboard is covered by a "Play on your phone" screen with a QR code and a link to the leaderboard (`showGate()` in `common.js`). Detection is by touch (`any-pointer: coarse` or `maxTouchPoints > 1`), not width, so tablets in landscape and iPads (which report themselves as Macs) still play. **Team shortcut:** on that screen, type the word **play** on the keyboard; the browser is unlocked for good (nothing on screen hints at it). Adding `?desktop` to any address does the same, and `?desktop=0` locks it again. `?auto`, `?tut` and `?debug` also skip the screen.
 
-**The TV (`leaderboard.html?screen`).** Overall only, no tabs: the top 8 on the left, and on the right the prizes (each showing who holds that place right now) and a large "Scan to play" QR code. Sized in viewport units for a 16:9 screen. With the shared leaderboard it refreshes every 4 s and shows a "Live" badge, or "Reconnecting" if the connection drops.
+**The TV (`leaderboard.html?screen`).** The same table without controls, showing as many whole rows as fit, with the prizes and a large QR code on the right. With the shared leaderboard it refreshes every 4 s and shows a "Live" badge, or "Reconnecting" if the connection drops.
 
 **Wide screens.** Games run full-window on any screen size (when allowed, see above): the canvas fills the browser and the game adapts to it. The intro, tutorial and results cards switch to a two-column layout when the window is at least 980 × 620 px (rules beside the title, the demo beside the explanation, the leaderboard beside the score). Each card's contents are grouped in `.ga` / `.gb` wrappers, which are `display: contents` on phones so the single-column order is unchanged. A desktop playfield is larger than a phone's, so desktop and phone scores aren't strictly comparable; at the event most people play on phones.
 
@@ -343,9 +350,10 @@ Every page has a description, favicon tags and Open Graph / Twitter tags, so a l
 | `?t=20` | Golden Thread, Clear Cut | Round length in seconds |
 | `?from=3000` | Deep Dive | Start depth in metres (0 to 6,100) |
 | `?tut` | game pages | Opens the tutorial directly |
-| `?screen` | leaderboard | The TV layout: Overall, prizes, QR code |
-| `?desktop` | any page | Play on a computer anyway (remembered; `?desktop=0` undoes it) |
-| `#deep-dive` etc. | leaderboard | Opens that tab |
+| `?screen` | leaderboard | The TV layout: no controls, rows fitted to the screen |
+| `?demo` | leaderboard | Fills it with invented players (not saved) |
+| `#deep-dive` etc. | leaderboard | Ranks by that game |
+| `?desktop` | any page | Play on a computer anyway (remembered; `?desktop=0` undoes it). Or type **play** on the "Play on your phone" screen |
 
 ### Resetting a device
 In the browser console: `localStorage.clear()`. Or use "Not you?" to sign out. With the shared leaderboard on, scores live on the server: clear them there (see [Admin](#admin)).
@@ -451,8 +459,9 @@ These were settled with the client. Please don't undo them without checking.
   - Name and company are asked once, on the first page. Returning players pick themselves from a list of names used on that device.
   - No email, because it would feel like lead capture at a no-pitch event.
 - **Pages:** the first page is intro and sign-in only. The games list is a separate page.
-- **Explainers:** each game explains how its mechanics map to the roundtable's theme, and the results and leaderboard show themed stats.
+- **Explainers:** each game explains how its mechanics map to the roundtable's theme, and the results and leaderboard show themed stats (on the leaderboard, when ranked by a game).
+- **Game order** everywhere: Stack Up, Vital Signs, Golden Thread, Deep Dive, Clear Cut (client, 2026-11-20). It follows the order of `GAMES` in `shared/common.js`.
+- **Leaderboard:** one table, no tabs, no "you" line or highlight, since it's shown publicly; scales with the screen up to 4K and TV.
 - **Typography and colour:** Inter everywhere; games differ by colour only. The Clear Cut card is dark on the games list so it doesn't outshine the other two.
 - **Sound:** off by default.
 - **Desktop (for testing with `?desktop`):** games run full screen, with no phone-shaped frame. The intro, tutorial and results cards use a two-column layout on wide windows. (A phone frame was tried and dropped.)
-- **Leaderboard:** an Overall tab across all games is required. No big title or description under the tabs.
