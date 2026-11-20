@@ -258,14 +258,26 @@
   }
 
   /* ---------- Phones and tablets only ----------
-     On a computer (no touchscreen) every page but the leaderboard is covered by a "scan to play" screen.
-     For the team: on that screen, type the word "play" on the keyboard to unlock this browser for good (nothing on
-     screen hints at it). ?desktop does the same from any address, and ?desktop=0 locks the browser again.
-     ?auto, ?tut and ?debug are developer options and skip the screen too. */
+     On a computer (no touchscreen) the first page is always the intro with a "scan to play" QR code, the leaderboard
+     is always just the leaderboard, and the games are locked.
+     For the team: on the intro or the leaderboard, type the word "play" on the keyboard (nothing on screen hints at
+     it). That unlocks this browser and opens the games list (or sign-in first, if nobody is signed in here).
+     ?desktop unlocks too, and ?desktop=0 locks the browser again. ?auto, ?tut and ?debug skip the lock for developers. */
   if (params.get('desktop') === '0') store.set('bs_desktop', false); else if (params.has('desktop')) store.set('bs_desktop', true);
   const page = (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '') || 'index';
   const touch = (window.matchMedia && matchMedia('(any-pointer: coarse)').matches) || navigator.maxTouchPoints > 1;
-  const GATED = !touch && page !== 'leaderboard' && !store.get('bs_desktop', false) && !['auto', 'tut', 'debug'].some(k => params.has(k));
+  const unlocked = () => store.get('bs_desktop', false);
+  const devSkip = ['auto', 'tut', 'debug'].some(k => params.has(k));
+  const GATED = !touch && !devSkip && (page === 'index' ? !(unlocked() && params.has('signin')) : page !== 'leaderboard' && !unlocked());
+  const hasPlayerNow = () => { const p = store.get('bs_player', {}); return !!(p.name && p.company); };
+  if (!touch && (GATED || page === 'leaderboard')) { // the team's shortcut: type "play"
+    let typed = '';
+    document.addEventListener('keydown', e => {
+      if (e.key.length !== 1 || /input|textarea/i.test((e.target && e.target.tagName) || '')) return;
+      typed = (typed + e.key.toLowerCase()).slice(-4);
+      if (typed === 'play') { store.set('bs_desktop', true); location.href = hasPlayerNow() ? 'games.html' : 'index.html?signin'; }
+    });
+  }
   function showGate() {
     const st = document.createElement('style');
     st.textContent = `
@@ -299,12 +311,6 @@
       <a href="leaderboard.html">See the leaderboard and prizes →</a></div>
       <figure><img src="icons/qr-play.svg" alt="QR code that opens the games"><figcaption>Scan to play</figcaption></figure></div>`;
     document.body.append(g);
-    let typed = '';
-    document.addEventListener('keydown', e => { // the team's shortcut: type "play"
-      if (e.key.length !== 1) return;
-      typed = (typed + e.key.toLowerCase()).slice(-4);
-      if (typed === 'play') { store.set('bs_desktop', true); location.reload(); }
-    });
   }
   if (GATED) { if (document.body) showGate(); else document.addEventListener('DOMContentLoaded', showGate); }
   const save = d => { if (!REMOTE) store.set(DB_KEY, d); };
@@ -381,7 +387,7 @@
   }
 
   const BS = {
-    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED, touch, demo: DEMO, unlocked: store.get('bs_desktop', false),
+    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED, touch, demo: DEMO, unlocked: unlocked(),
     ease: t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3),
     rr(c, x, y, w, h, r) {
       r = Math.min(r, w / 2, h / 2);

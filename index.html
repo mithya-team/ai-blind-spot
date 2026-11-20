@@ -148,11 +148,11 @@
     </form>
   </main>
 </div>
-<script src="shared/config.js?v=19"></script>
-<script src="shared/common.js?v=19"></script>
+<script src="shared/config.js?v=20"></script>
+<script src="shared/common.js?v=20"></script>
 <script>
   const next = BS.params.get('next'), dest = next && /^[a-z0-9-]+\.html$/.test(next) ? next : 'games.html';
-  if (BS.hasPlayer()) location.replace(dest); // already signed in on this device: go straight to the games
+  if (BS.hasPlayer() && !BS.gated) location.replace(dest); // already signed in on this device: go straight to the games (computers stay on the intro)
   document.getElementById('logos').innerHTML = BS.LOGOS_FULL;
   const join = document.getElementById('join'), nm = document.getElementById('nm'), co = document.getElementById('co');
   const known = document.getElementById('known'), klist = document.getElementById('klist');

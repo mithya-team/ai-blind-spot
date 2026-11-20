@@ -302,8 +302,8 @@
   </div>
   <p class="note">Prototype: scores are saved on this device only for now.</p>
 </div>
-<script src="shared/config.js?v=19"></script>
-<script src="shared/common.js?v=19"></script>
+<script src="shared/config.js?v=20"></script>
+<script src="shared/common.js?v=20"></script>
 <script>
   if (!BS.hasPlayer()) location.replace('index.html');
   document.getElementById('logos').innerHTML = BS.LOGOS;
@@ -324,7 +324,7 @@
     st.hidden = !rank;
     if (rank) st.innerHTML = `<span>Your overall standing</span><b>#${rank} of ${all.length} · ${BS.fmt(all[rank - 1].score)} pts →</b>`;
   }
-  document.querySelectorAll('.notme').forEach(b => { b.hidden = !BS.CFG.allowSwitchPlayer; b.onclick = () => { BS.clearPlayer(); location.href = 'index.html'; }; });
+  document.querySelectorAll('.notme').forEach(b => { b.hidden = !BS.CFG.allowSwitchPlayer; b.onclick = () => { BS.clearPlayer(); location.href = BS.touch ? 'index.html' : 'index.html?signin'; }; });
   const cards = document.querySelectorAll('#games .game').length;
   document.querySelector('.wrap').classList.toggle('many', cards > 3);
   document.getElementById('games').style.setProperty('--n', cards);
