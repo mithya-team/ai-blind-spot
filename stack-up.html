@@ -71,6 +71,34 @@
   // The three hosts sit on the layers they play in the stack (AI is a team sport): AWS, OpenText, Capgemini.
   const TILES = {};
   for (const k in BS.TILE_SRC) { const im = new Image(); im.src = BS.TILE_SRC[k]; TILES[k] = im; }
+  // Who plays each layer, bottom to top, as in OpenText's "Ecosystem and Choice" slide (logos in partners/).
+  const PARTNERS = [
+    ['google-cloud', 'azure', 'aws'],
+    ['sap', 'guidewire', 'salesforce', 'oracle', 'workday'],
+    ['opentext'],
+    ['openai', 'cohere', 'gemini', 'bedrock', 'anthropic'],
+    ['accenture', 'cohere', 'ey', 'capgemini', 'deloitte'],
+    ['microsoft', 'sap'],
+  ];
+  const PIMG = {};
+  for (const row of PARTNERS) for (const k of row) if (!PIMG[k]) { const im = new Image(); im.src = `partners/${k}.png`; PIMG[k] = im; }
+  // A white chip holding a layer's logos, h tall, at most w wide; align 'right' ends it at x + w.
+  function logoStrip(c, keys, x, y, w, h, align, alpha) {
+    const ims = keys.map(k => PIMG[k]).filter(im => im.complete && im.naturalWidth);
+    if (!ims.length || alpha <= 0) return;
+    let p = h * .2, lh = h - 2 * p, gap = p * 1.3;
+    const widths = ims.map(im => Math.min(lh * im.naturalWidth / im.naturalHeight, lh * 3.4));
+    let total = widths.reduce((a, b) => a + b, 0) + gap * (ims.length - 1), k = Math.min(1, (w - 2 * p) / total);
+    const cw = total * k + 2 * p, cx = align === 'right' ? x + w - cw : x;
+    c.save(); c.globalAlpha *= alpha;
+    c.fillStyle = 'rgba(255,255,255,.96)'; BS.rr(c, cx, y, cw, h, h * .28); c.fill();
+    let lx = cx + p;
+    ims.forEach((im, i) => {
+      const ww = widths[i] * k, hh = ww * im.naturalHeight / im.naturalWidth;
+      c.drawImage(im, lx, y + (h - hh) / 2, ww, hh); lx += ww + gap * k;
+    });
+    c.restore();
+  }
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -176,7 +204,7 @@
     }
     // host logo tile at the right end of the front face, when the slab is wide enough
     const tile = LAYERS[i].logo && TILES[LAYERS[i].logo], ts = Math.round(clamp(sh * .5, 12, 34)), tp = Math.max(6, sh * .2);
-    const showTile = !o.bare && tile && tile.complete && tile.naturalWidth && w > ts * 3.4;
+    const showTile = !o.bare && !o.noTile && tile && tile.complete && tile.naturalWidth && w > ts * 3.4;
     if (showTile) {
       const tx = x + w - tp - ts, ty = y + (sh - ts) / 2;
       c.save(); BS.rr(c, tx, ty, ts, ts, ts * .23); c.clip(); c.drawImage(tile, tx, ty, ts, ts); c.restore();
@@ -221,8 +249,9 @@
       c.setLineDash([]);
       c.textAlign = 'left'; c.font = `600 15px ${FONT}`; c.fillStyle = L.key ? `rgba(165,200,255,${a})` : `rgba(234,255,245,${a})`;
       c.fillText(L.b, xr + 4, y);
-      c.textAlign = 'right'; c.font = `600 10.5px ${FONT}`; c.fillStyle = `rgba(234,255,245,${a * .6})`;
-      c.fillText(trk('Layer ' + (i + 1)), xl - 4, y);
+      // left: the companies that play this layer
+      const sh = Math.min(g.sh * .6, 40);
+      logoStrip(c, PARTNERS[i], 24, y - sh / 2, xl - 4 - 24, sh, 'right', on ? 1 : now ? .85 : .4);
     }
     c.restore();
   }
@@ -529,11 +558,29 @@
     const save = clock; clock = 9; drawLives(c, w - 38, 20, LIVES, -9); clock = save;
   }
 
+  // AI is a team sport: the stack with the companies that play each layer.
+  function demoTeam(c, w, h, T) {
+    const t = T % 6;
+    const v = c.createLinearGradient(0, 0, 0, h); v.addColorStop(0, '#061914'); v.addColorStop(1, '#04100d');
+    c.fillStyle = v; c.fillRect(0, 0, w, h);
+    const sw = Math.min(w * .36, 170), g0 = geom(sw * 1.6, h, true), g = { ...g0, cx: 10 + g0.bw / 2 + 4 };
+    drawPlinth(c, g);
+    const S = [[-.5, 1], [-.48, .96], [-.48, .94], [-.46, .9], [-.46, .88], [-.45, .86]];
+    S.forEach(([u, ww], i) => {
+      const a = clamp((t - i * .35) * 4, 0, 1) * clamp((6 - t) * 4, 0, 1);
+      if (a <= 0) return;
+      drawSlab(c, g, X(g, u), Y(g, i), ww * g.bw, i, { alpha: a, noTile: true });
+      const x0 = g.cx + g.bw / 2 + g.d + 10, sh = Math.min(g.sh * .72, 30);
+      logoStrip(c, PARTNERS[i], x0, Y(g, i) + (g.sh - sh) / 2, w - x0 - 8, sh, 'left', clamp((t - i * .35 - .25) * 4, 0, 1) * clamp((6 - t) * 4, 0, 1));
+    });
+  }
+
   const TUTORIAL = [
     { title: 'Tap to drop', text: 'A layer of your AI stack slides across. Tap anywhere to drop it onto the one below. Line it up exactly for a perfect drop.', demo: demoDrop },
     { title: 'Overhang is cut away', text: 'Whatever hangs over the edge is lost. Every layer can only be as wide as the one beneath it.', demo: demoCut },
     { title: 'Context carries the rest', text: 'The blue layer is Context & Connected Data: the oxygen. Models, orchestration and agents all stand on it. Land it badly and everything above shrinks.', demo: demoContext },
     { title: 'Build all six', text: `Finish a stack for a bonus, then build the next one faster. Miss a layer completely and the stack collapses. Three collapses or ${DURATION} seconds end the round.`, demo: demoFull },
+    { title: 'AI is a team sport', text: 'No single company owns the stack. Cloud providers, systems of record, OpenText, model makers, integrators and app builders each play a layer.', demo: demoTeam },
   ];
 
   if (BS.params.has('debug')) window.__dbg = {
