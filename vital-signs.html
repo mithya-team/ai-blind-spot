@@ -27,7 +27,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=20">
+<link rel="stylesheet" href="shared/common.css?v=21">
 <style>
   :root {
     --bg: #150a14; --fg: #ffeef2; --accent: #ff9db2; --on-accent: #2a0a16;
@@ -40,12 +40,12 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/config.js?v=20"></script>
-<script src="shared/common.js?v=20"></script>
+<script src="shared/config.js?v=21"></script>
+<script src="shared/common.js?v=21"></script>
 <script>
 /* Vital Signs: "context is the oxygen of AI", made playable.
    The figure is an AI. Its brain is the models, its nervous system is orchestration, its muscles are the agents.
-   Each part uses up oxygen as it works. Blue bubbles are governed context (oxygen): drag one onto a part to refill it.
+   Each part uses up oxygen as it works. Blue bubbles are trusted context and connected data (oxygen): drag one onto a part to refill it.
    Grey bubbles are raw, ungoverned content: tap to govern them first. Feed a part raw content and it chokes.
    A part that runs out stalls. Three stalls, or the clock, end the round. */
 (() => {
@@ -609,7 +609,7 @@
 
   const TUTORIAL = [
     { title: 'Your AI needs oxygen', text: 'The brain is your models, the nervous system is orchestration, the muscles are your agents. Each ring runs down as that part works.', demo: demoNeeds },
-    { title: 'Drag context to a part', text: 'Blue bubbles are governed context: oxygen. Drag one onto whichever part is running low.', demo: demoFeed },
+    { title: 'Drag context to a part', text: 'Blue bubbles are trusted context and connected data: the oxygen. Drag one onto whichever part is running low.', demo: demoFeed },
     { title: 'Govern raw content first', text: 'Grey bubbles are raw, unstructured content. Tap one to govern it and it becomes oxygen.', demo: demoGovern },
     { title: 'Never feed raw content', text: 'Give a part ungoverned content and it chokes: it loses oxygen instead of gaining it.', demo: demoChoke },
     { title: 'Don’t let anything stall', text: `A part with an empty ring stalls. Three stalls or ${DURATION} seconds end the round. Keep all three breathing to build your multiplier.`, demo: demoStall },

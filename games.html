@@ -302,8 +302,8 @@
   </div>
   <p class="note">Prototype: scores are saved on this device only for now.</p>
 </div>
-<script src="shared/config.js?v=20"></script>
-<script src="shared/common.js?v=20"></script>
+<script src="shared/config.js?v=21"></script>
+<script src="shared/common.js?v=21"></script>
 <script>
   if (!BS.hasPlayer()) location.replace('index.html');
   document.getElementById('logos').innerHTML = BS.LOGOS;
@@ -322,7 +322,8 @@
     });
     const all = BS.overall(), rank = all.findIndex(r => r.key === me) + 1, st = document.getElementById('standing');
     st.hidden = !rank;
-    if (rank) st.innerHTML = `<span>Your overall standing</span><b>#${rank} of ${all.length} · ${BS.fmt(all[rank - 1].score)} pts →</b>`;
+    const rg = BS.rung(rank, all.length);
+    if (rank) st.innerHTML = `<span>Your overall standing</span><b>#${rank} of ${all.length} · ${BS.fmt(all[rank - 1].score)} pts${rg ? ` · ${rg.name}` : ''} →</b>`;
   }
   document.querySelectorAll('.notme').forEach(b => { b.hidden = !BS.CFG.allowSwitchPlayer; b.onclick = () => { BS.clearPlayer(); location.href = BS.touch ? 'index.html' : 'index.html?signin'; }; });
   const cards = document.querySelectorAll('#games .game').length;

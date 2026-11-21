@@ -85,6 +85,10 @@
     -webkit-mask-image: radial-gradient(closest-side, transparent 84%, #000 88%, #000 96%, transparent 100%); mask-image: radial-gradient(closest-side, transparent 84%, #000 88%, #000 96%, transparent 100%); }
   .lede { color: var(--dim); font-size: 17px; line-height: 1.5; margin: 0 0 28px; max-width: 34ch; text-wrap: pretty; }
   .lede b { display: block; color: var(--fg); font-weight: 600; margin-top: 4px; }
+  /* OpenText's line, verbatim, with the gradient from their deck on the middle phrase. */
+  .otline { display: flex; align-items: flex-start; gap: 10px; margin: -12px 0 26px; max-width: 36ch; font-size: 13.5px; line-height: 1.45; font-weight: 500; color: var(--fg); }
+  .otline img { flex: none; width: 20px; height: 20px; border-radius: 5px; margin-top: 1px; clip-path: inset(3% round 22%); }
+  .otline b { font-weight: 700; background: linear-gradient(90deg, #4fa3ff, #1968ff 45%, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
   .join { padding: 22px 18px 16px; border-radius: 26px; background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.045)); border: 1px solid var(--line); box-shadow: 0 30px 60px -40px #000, inset 0 1px 0 rgba(255,255,255,.14); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
   .join h2 { margin: 0 0 14px; font-family: var(--font-head); font-size: 23px; letter-spacing: -.02em; }
@@ -119,6 +123,8 @@
     .eclipse { --d: min(86vh, 58vw); right: calc(var(--d) * -.2); top: calc(var(--d) * -.24); }
     h1 { font-size: clamp(64px, 7.6vw, 136px); margin: 0 0 28px; }
     .lede { font-size: clamp(19px, 1.5vw, 23px); max-width: 30ch; margin: 0; }
+    .otline { margin: 26px 0 0; font-size: clamp(14px, 1.05vw, 17px); max-width: 40ch; }
+    .otline img { width: 24px; height: 24px; }
     .join { padding: 28px 26px 20px; }
     .join h2 { font-size: 26px; margin-bottom: 18px; }
   }
@@ -133,6 +139,7 @@
     <div class="intro">
       <h1 aria-label="The AI Blind Spot"><small aria-hidden="true">The AI</small><span aria-hidden="true">Blind Sp<i class="spot"></i>t</span></h1>
       <p class="lede">Models and agents stall without context. Your AI is only as smart as the information it can reach. <b>A few quick games. Beat the room.</b></p>
+      <p class="otline"><img src="shared/ot-icon.png" alt="OpenText"><span>We Give Clients <b>Trusted Context &amp; Connected Data</b> for AI Outcomes.</span></p>
     </div>
     <form class="join" id="join" autocomplete="on">
       <h2>Who's playing?</h2>
@@ -148,8 +155,8 @@
     </form>
   </main>
 </div>
-<script src="shared/config.js?v=20"></script>
-<script src="shared/common.js?v=20"></script>
+<script src="shared/config.js?v=21"></script>
+<script src="shared/common.js?v=21"></script>
 <script>
   const next = BS.params.get('next'), dest = next && /^[a-z0-9-]+\.html$/.test(next) ? next : 'games.html';
   if (BS.hasPlayer() && !BS.gated) location.replace(dest); // already signed in on this device: go straight to the games (computers stay on the intro)

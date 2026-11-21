@@ -34,6 +34,23 @@
     <svg class="lf aws" viewBox="0 3.8 24 15.8" role="img" aria-label="AWS"><path fill="#fff" d="${AWS_TEXT}"/><path fill="#FF9900" d="${AWS_SMILE}"/></svg>
     <svg class="lf cap" viewBox="-0.5 -0.5 160.5 36.6" role="img" aria-label="Capgemini"><path fill="#fff" fill-rule="evenodd" d="${CAP_WORD}"/><path fill="#fff" fill-opacity=".6" fill-rule="evenodd" d="${CAP_LIGHT}"/></svg>
   </span>`;
+  /* The co-brand tiles as standalone images, for canvas drawing (Stack Up puts them on their layers of the stack). */
+  const svgUri = svg => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  const TILE_SRC = {
+    ot: 'shared/ot-icon.png',
+    aws: svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5.5" fill="#232F3E"/><g transform="translate(12 12.4) scale(.68) translate(-12 -12)"><path fill="#fff" d="${AWS_TEXT}"/><path fill="#FF9900" d="${AWS_SMILE}"/></g></svg>`),
+    cap: svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5.5" fill="#fff"/><g transform="translate(12 12) scale(.54) translate(-145.6 -12.7)"><path fill="#0070AD" fill-rule="evenodd" d="${CAP_DARK}"/><path fill="#12ABDB" fill-rule="evenodd" d="${CAP_LIGHT}"/></g></svg>`),
+  };
+  /* OpenText's own line, used verbatim (client instruction). The middle phrase carries the gradient. */
+  const OT_LINE = { pre: 'We Give Clients', key: 'Trusted Context & Connected Data', post: 'for AI Outcomes.' };
+  /* Two facts from OpenText's November 2026 story deck, shown at the end of rounds and on the computer intro. */
+  const FACTS = [
+    { big: '88%', text: 'of AI pilots never reach production.', src: 'IDC' },
+    { big: '77%', text: 'of executives say a fifth of their data, or less, is usable by AI.', src: '' },
+  ];
+  /* OpenText's AI Ladder, used as titles on the leaderboard: by overall rank, top quarter first. */
+  const LADDER = ['In-App AI', 'In-App Agents', 'Composable AI', 'Agentic Enterprise'];
+  const rung = (rank, n) => { if (!rank || !n) return null; const q = (rank - 1) / n; const k = q < .25 ? 4 : q < .5 ? 3 : q < .75 ? 2 : 1; return { n: k, name: LADDER[k - 1] }; };
   const LOGOS = `<span class="bs-logos" aria-label="OpenText, AWS and Capgemini">
     <span class="bs-lg bs-ot"><img src="shared/ot-icon.png" alt="OpenText"></span>
     <svg class="bs-lg" viewBox="0 0 24 24" role="img" aria-label="AWS"><rect width="24" height="24" fill="#232F3E"/><g transform="translate(12 12.4) scale(.68) translate(-12 -12)"><path fill="#fff" d="${AWS_TEXT}"/><path fill="#FF9900" d="${AWS_SMILE}"/></g></svg>
@@ -46,7 +63,7 @@
       title: 'Stack Up', href: 'stack-up.html',
       blurb: 'Build the six layers of your AI stack. Every layer is only as wide as the one beneath it.',
       meaning: [
-        ['The stack', 'Six layers, bottom to top: infrastructure, systems of record, context, language models, orchestration, agents.'],
+        ['The stack', 'Six layers, bottom to top: infrastructure (AWS), systems of record, context & connected data (OpenText), language models, orchestration (Capgemini), agents.'],
         ['The cut', 'Whatever overhangs the layer below is lost. No layer can be wider than the one it stands on.'],
         ['Context', 'The blue layer, Context & Connected Data, is the oxygen. Models and agents are only as strong as it is.'],
         ['The body', 'Skeleton, vital organs, oxygen, brain, nervous system, muscles: one for each layer.'],
@@ -64,7 +81,7 @@
       blurb: 'Context is the oxygen of AI. Keep the brain, nerves and muscles breathing.',
       meaning: [
         ['The body', 'Your AI. The brain is its models, the nervous system is orchestration, the muscles are its agents.'],
-        ['Oxygen', 'Governed context. Every part uses it up as it works, and stalls without it.'],
+        ['Oxygen', 'Trusted context and connected data. Every part uses it up as it works, and stalls without it.'],
         ['Raw content', 'Unstructured and ungoverned: emails, files, records. Tap to govern it and it becomes oxygen.'],
         ['Stalls', 'A part that runs out of oxygen stops. Feed it raw content and it chokes.'],
       ],
@@ -116,7 +133,7 @@
       meaning: [
         ['Frosted panes', 'The barriers around your unstructured content: silos, legacy apps, hidden data and scattered files.'],
         ['Cutting', 'Clearing a barrier makes the document behind it visible to your AI.'],
-        ['Gold seals', 'The governed, secure layer: security, privacy and compliance. Tap to approve. Never cut through one.'],
+        ['Gold seals', 'Trusted context: whether data is secure, compliant and cleared for use. Tap to approve. Never cut through one.'],
       ],
       stats: [
         { k: 'cleared', l: 'Barriers cleared' },
@@ -302,14 +319,24 @@
       .bs-gate figure { margin: 0; padding: 22px 22px 16px; border-radius: 28px; background: #fff; color: #0b1020; text-align: center; box-shadow: 0 30px 80px -30px #000; }
       .bs-gate figure img { display: block; width: 240px; height: 240px; }
       .bs-gate figcaption { margin-top: 12px; font-size: 14px; font-weight: 600; }
+      .bs-gate { grid-template-rows: 1fr auto; }
+      .bs-gate .facts { display: flex; gap: 28px; margin-top: 28px; }
+      .bs-gate .facts div { max-width: 210px; }
+      .bs-gate .facts b { display: block; font-size: 40px; font-weight: 700; letter-spacing: -.03em; line-height: 1; color: #eef1f8; }
+      .bs-gate .facts span { display: block; margin-top: 6px; font-size: 14px; line-height: 1.4; color: rgba(238,241,248,.7); }
+      .bs-gate .facts .src { font-style: normal; color: rgba(238,241,248,.45); font-size: 11.5px; }
+      .bs-gate .otline { margin: 0; max-width: none; justify-self: center; align-self: end; padding-top: 28px; text-align: center; font-size: clamp(18px, 1.8vw, 26px); font-weight: 600; letter-spacing: -.01em; color: #eef1f8; }
+      .bs-gate .otline b { font-weight: 700; background: linear-gradient(90deg, #4fa3ff, #1968ff 45%, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; }
       @media (max-width: 820px) { .bs-gate .in { grid-template-columns: 1fr; gap: 36px; justify-items: start; } }`;
     document.head.append(st);
     const g = document.createElement('div');
     g.className = 'bs-gate'; g.setAttribute('role', 'dialog'); g.setAttribute('aria-label', 'Play on your phone');
     g.innerHTML = `<div class="in"><div>${LOGOS_FULL}<small>The AI Blind Spot</small><h1>Play on your phone</h1>
       <p>These games are made for <b>phones and tablets</b>. Scan the code with your camera to start.</p>
+      <div class="facts">${FACTS.map(f => `<div><b>${f.big}</b><span>${esc(f.text)}${f.src ? ` <i class="src">${esc(f.src)}</i>` : ''}</span></div>`).join('')}</div>
       <a href="leaderboard.html">See the leaderboard and prizes →</a></div>
-      <figure><img src="icons/qr-play.svg" alt="QR code that opens the games"><figcaption>Scan to play</figcaption></figure></div>`;
+      <figure><img src="icons/qr-play.svg" alt="QR code that opens the games"><figcaption>Scan to play</figcaption></figure></div>
+      <p class="otline">${OT_LINE.pre} <b>${esc(OT_LINE.key)}</b> ${OT_LINE.post}</p>`;
     document.body.append(g);
   }
   if (GATED) { if (document.body) showGate(); else document.addEventListener('DOMContentLoaded', showGate); }
@@ -387,7 +414,7 @@
   }
 
   const BS = {
-    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED, touch, demo: DEMO, unlocked: unlocked(),
+    params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED, touch, demo: DEMO, unlocked: unlocked(), TILE_SRC, OT_LINE, FACTS, LADDER, rung,
     ease: t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3),
     rr(c, x, y, w, h, r) {
       r = Math.min(r, w / 2, h / 2);
@@ -557,6 +584,7 @@
         <div class="big" id="bs-score"></div>
         <div class="label" id="bs-label"></div>
         <p class="theme" id="bs-theme"></p>
+        <p class="fact" id="bs-fact"></p>
         <div class="statgrid" id="bs-stats"></div>
         <div id="bs-epips"></div>
         <button class="btn" id="bs-next" type="button"></button></div>
@@ -672,6 +700,8 @@
       $('#bs-label').textContent = label;
       $('#bs-label').classList.toggle('best', isBest);
       $('#bs-theme').textContent = r.theme || '';
+      const f = FACTS[(this.progress(id).runs.length + Object.keys(GAMES).indexOf(id)) % FACTS.length];
+      $('#bs-fact').innerHTML = `<b>${f.big}</b> ${esc(f.text)}${f.src ? ` <small>${esc(f.src)}</small>` : ''}`;
       const s = r.stats || {};
       $('#bs-stats').innerHTML = meta.stats.map(x => `<div class="${x.bad ? 'bad' : ''}${x.bad && !s[x.k] ? ' zero' : ''}"><b><em style="font-style:normal">${s[x.k] == null ? '—' : x.raw ? esc(s[x.k]) : fmt(s[x.k])}</em>${x.of && s[x.k] != null ? `<small> of ${x.of}</small>` : ''}${x.unit && s[x.k] != null ? `<small>${x.unit}</small>` : ''}</b><span>${x.l}</span></div>`).join('');
       meta.stats.forEach((x, i) => {

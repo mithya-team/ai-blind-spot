@@ -139,6 +139,14 @@ OpenText's current positioning (two slides shared by the client in November 2026
 
 Each game carries one of these: Golden Thread is *connected data*, Deep Dive is *context as oxygen*, Clear Cut is *governed*, Stack Up is *the six layers*, Vital Signs is *the body*.
 
+**OpenText's story deck (November 2026, in the project folder, not committed)** adds:
+- **The line, used verbatim:** "We Give Clients Trusted Context & Connected Data for AI Outcomes." It appears on the first page (phones) and the computer intro, with their blue-to-violet gradient on the middle phrase (`OT_LINE` in `shared/common.js`). Don't paraphrase it.
+- **Two facts** (`FACTS`): 88% of AI pilots never reach production (IDC), and 77% of executives say a fifth of their data or less is usable by AI. They appear under the takeaway on every results card (alternating) and on the computer intro. The deck gives no source for the 77% figure; confirm one before the event.
+- **Trusted context vs connected data:** connected data tells an agent what is happening (Golden Thread); trusted context tells it whether it's safe to act (Clear Cut's seals). Vital Signs' oxygen is both.
+- **The AI Ladder** (`LADDER`, `rung()`): leaderboard rows and the games-page standing carry a title by overall rank: top quarter Agentic Enterprise, then Composable AI, In-App Agents, In-App AI.
+- **AI is a team sport:** Stack Up shows the hosts' logo tiles on the layers OpenText's deck gives them: AWS on Infrastructure, OpenText on Context & Connected Data, Capgemini on Orchestration (`TILE_SRC`).
+- **Prize name:** "OpenText Aviator socks" (Aviator is OpenText's AI brand).
+
 Every game is one HTML file, drawn on a `<canvas>`. They share the same contract with the shell:
 
 ```js

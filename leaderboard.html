@@ -109,8 +109,17 @@
   li.p3 .pos { background: linear-gradient(150deg, #ffd9b8, #cf8a52 55%, #96592a); color: #2a1503; }
   li.p1 { background: linear-gradient(120deg, rgba(255,255,255,.12), rgba(255,255,255,.045)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
   .who { grid-area: who; min-width: 0; }
-  .who b { display: block; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who b { display: flex; align-items: center; min-width: 0; font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .who b .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .who b .rung { flex: none; }
+  .rung.own { display: none; }
   .who small { display: block; font-size: 12.5px; color: var(--dim); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* AI Ladder title beside the company */
+  .rung { font-style: normal; display: inline-block; margin-left: .6em; padding: .16em .55em .18em; border-radius: .5em; font-size: .62em; font-weight: 700; line-height: 1.25; letter-spacing: .01em; }
+  .rung.r4 { background: rgba(241,212,138,.16); color: #f6dc98; }
+  .rung.r3 { background: rgba(79,163,255,.16); color: #9cc8ff; }
+  .rung.r2 { background: rgba(139,92,246,.18); color: #c9b6ff; }
+  .rung.r1 { background: rgba(255,255,255,.08); color: var(--dim); }
   .chips { grid-area: stats; display: flex; flex-wrap: wrap; gap: 4px; margin-top: -2px; }
   .chips i { font-style: normal; font-size: 11px; font-weight: 700; color: var(--c); padding: 5px 2px; }
   .chips span { font-size: 11.5px; line-height: 1; padding: 5px 8px; border-radius: 8px; background: rgba(255,255,255,.07); color: var(--dim); white-space: nowrap; }
@@ -178,6 +187,8 @@
     .games { display: contents; }
     .pos { width: calc(40 * var(--u)); height: calc(40 * var(--u)); font-size: calc(16 * var(--u)); }
     .who b { font-size: calc(18 * var(--u)); } .who small { font-size: calc(13 * var(--u)); margin-top: calc(1 * var(--u)); }
+    /* wide screens: the AI Ladder title gets its own line under the company, so names never get squeezed */
+    .rung.in { display: none; } .rung.own { display: inline-block; margin: calc(5 * var(--u)) 0 0; font-size: calc(11 * var(--u)); }
     /* ranked by one game: that game's themed stats on a line of their own under the row */
     .chips { grid-area: auto; grid-column: 2 / -1; grid-row: 2; display: flex; flex-wrap: wrap; gap: calc(5 * var(--u)); margin: calc(8 * var(--u)) 0 calc(2 * var(--u)); }
     .chips i { font-size: calc(11.5 * var(--u)); padding: calc(5 * var(--u)) calc(4 * var(--u)) calc(5 * var(--u)) 0; }
@@ -220,8 +231,8 @@
     <div class="scan"><img src="icons/qr-play.svg" alt="QR code that opens the games"><div><b>Scan to play</b><span>Point your phone's camera at the code. Three quick games, three attempts each.</span></div></div>
   </aside>
 </div>
-<script src="shared/config.js?v=20"></script>
-<script src="shared/common.js?v=20"></script>
+<script src="shared/config.js?v=21"></script>
+<script src="shared/common.js?v=21"></script>
 <script>
   const LOOK = {
     'stack-up': { acc: '#8ff0c0', short: 'Stack Up' },
@@ -284,6 +295,7 @@
       rows = rows.map(r => ({ ...r, rank: order.has(r.key) ? order.get(r.key) + 1 : null }));
     }
     const leader = {}; for (const g of games) leader[g] = boards[g][0] && boards[g][0].key;
+    const overallRank = new Map(all.map((r, i) => [r.key, i + 1])); // AI Ladder titles always follow the total
 
     document.getElementById('cnt').textContent = all.length ? BS.pl(all.length, 'player') : '';
     const sortBtns = [['total', 'Total', '#eef1f8'], ...games.map(g => [g, BS.GAMES[g].title, LOOK[g].acc])];
@@ -302,7 +314,7 @@
       }).join('');
       const medal = r.rank && r.rank <= 3 ? ' p' + r.rank : '';
       return `<li class="${medal}" style="--i:${i}"><span class="pos">${r.rank || '–'}</span>
-        <span class="who"><b>${BS.esc(r.name)}</b><small>${BS.esc(r.company)}</small></span>
+        ${(rg => `<span class="who"><b><span class="nm">${BS.esc(r.name)}</span>${rg ? `<i class="rung r${rg.n} in">${rg.name}</i>` : ''}</b><small>${BS.esc(r.company)}</small>${rg ? `<i class="rung r${rg.n} own">${rg.name}</i>` : ''}</span>`)(BS.rung(overallRank.get(r.key), all.length))}
         ${st ? `<span class="chips" style="--c:${LOOK[sort].acc}"><i>${BS.esc(BS.GAMES[sort].title)}</i>${BS.GAMES[sort].line(st.stats || {}).split(' · ').map(c => `<span>${BS.esc(c)}</span>`).join('')}</span>` : ''}
         <span class="games">${cells}</span>
         <span class="tot">${BS.fmt(r.score)}<small>total</small></span></li>`;
@@ -310,6 +322,7 @@
 
     document.getElementById('note').innerHTML = (sort === 'total' ? 'Each game is worth up to 1,000 points: the top score in a game gets 1,000 and everyone else is scaled against it. The prizes go by the total.' : `Ranked by ${BS.esc(BS.GAMES[sort].title)}. Tap Total to go back.`) +
       ' Small figures are each player\'s best score. On a tie, whoever got there first ranks higher.' +
+      ' Titles follow OpenText\'s AI Ladder: the top quarter are Agentic Enterprise, then Composable AI, In-App Agents and In-App AI.' +
       (BS.demo ? '<br>Showing invented sample players (?demo).' : BS.sync.remote ? '' : '<br>Prototype: this shows scores saved on this device.');
     paintPrizes(all); paintLive();
     if (screen) fitRows();

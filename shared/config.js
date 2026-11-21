@@ -21,6 +21,6 @@ window.BS_CONFIG = {
     { place: 1, label: '1st overall', title: 'Meta Ray-Ban glasses or a TUMI backpack', icon: 'glasses', img: ['prizes/meta-rayban.png', 'prizes/tumi.png'] },
     { place: 2, label: '2nd overall', title: 'WHOOP band with a 1-year membership', icon: 'band', img: 'prizes/whoop.png?v=2' },
     { place: 3, label: '3rd overall', title: 'LARQ self-cleaning bottle', icon: 'bottle', img: 'prizes/larq.png?v=2' },
-    { place: 0, label: 'Everyone who plays', title: 'Aviator socks', icon: 'socks', img: '' },
+    { place: 0, label: 'Everyone who plays', title: 'OpenText Aviator socks', icon: 'socks', img: '' },
   ],
 };
