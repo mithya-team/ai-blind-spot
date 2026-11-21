@@ -67,7 +67,7 @@ shared/common.css   Styles for the shared cards (intro, tutorial, results)
 shared/ot-icon.png  OpenText "ot" icon (from their partner brand guide)
 icons/              Favicons and home-screen icon, made from the OpenText "ot" icon
 og/                 Share images (1200 x 630), one per page, for link previews
-partners/           Partner logos from OpenText's ecosystem slide (Stack Up)
+partners/           Partner logos from OpenText's ecosystem slide (saved, not used yet)
 tools/og/           Generator for the share images (see "Share images and icons")
 icons/qr-play.svg   QR code to the live site, shown on computers and the TV
 supabase/schema.sql Database setup for the shared leaderboard
@@ -146,7 +146,7 @@ Each game carries one of these: Golden Thread is *connected data*, Deep Dive is 
 - **Trusted context vs connected data:** connected data tells an agent what is happening (Golden Thread); trusted context tells it whether it's safe to act (Clear Cut's seals). Vital Signs' oxygen is both.
 - **The AI Ladder** (`LADDER`, `rung()`): leaderboard rows and the games-page standing carry a title by overall rank: top quarter Agentic Enterprise, then Composable AI, In-App Agents, In-App AI.
 - **AI is a team sport:** Stack Up shows the hosts' logo tiles on the layers OpenText's deck gives them: AWS on Infrastructure, OpenText on Context & Connected Data, Capgemini on Orchestration (`TILE_SRC`).
-- **The ecosystem:** Stack Up also shows the partner logos from OpenText's "Ecosystem and Choice" slide beside each layer on wide screens, and in a fifth tutorial step ("AI is a team sport") on every screen. Infrastructure: Google Cloud, Azure, AWS. Systems of Record: SAP, Guidewire, Salesforce, Oracle, Workday. Context: OpenText. Language Models: OpenAI, Cohere, Gemini, Amazon Bedrock, Anthropic. Orchestration: Accenture, Cohere, EY, Capgemini, Deloitte. Application & Agents: Microsoft, SAP. Files are in `partners/`, taken from the deck; the mapping is `PARTNERS` in `stack-up.html`. Approved by the client (2026-11-21).
+- **The ecosystem slide's partner logos** are saved in `partners/` (taken from the deck) but not used in the games: the client chose to keep only the three hosts' logos in Stack Up (2026-11-21).
 - **Prize name:** "OpenText Aviator socks" (Aviator is OpenText's AI brand).
 
 Every game is one HTML file, drawn on a `<canvas>`. They share the same contract with the shell:
