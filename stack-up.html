@@ -27,7 +27,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=21">
+<link rel="stylesheet" href="shared/common.css?v=22">
 <style>
   :root {
     --bg: #05130f; --fg: #eafff5; --accent: #7df0b8; --on-accent: #04251a;
@@ -40,8 +40,8 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/config.js?v=21"></script>
-<script src="shared/common.js?v=21"></script>
+<script src="shared/config.js?v=22"></script>
+<script src="shared/common.js?v=22"></script>
 <script>
 /* Stack Up: build the six layers of the enterprise AI stack, bottom to top.
    A layer slides across; tap to drop it. Whatever overhangs the layer below is cut away,
@@ -88,7 +88,7 @@
 
   // ---------- geometry ----------
   function geom(w, h, demo) {
-    const baseY = demo ? h - 20 : h - clamp(h * .13, 86, 118);
+    const baseY = demo ? h - 20 : h - (w >= 980 ? Math.max(172, h * .19) : clamp(h * .16, 134, 140)); // room below for the first-play hint and the shell's strip
     const sh = demo ? clamp((baseY - 54) / 6.3, 16, 54) : clamp((baseY - 150) / 7.3, 34, 72);
     const bw = demo ? clamp(w * .46, 110, 270) : clamp(w * .6, 190, 400);
     return { w, h, cx: w / 2, baseY, sh, bw, d: sh * .3, side: !demo && (w - bw) / 2 > 250 };
@@ -443,7 +443,8 @@
   let last = performance.now();
   function frame(t) {
     const dt = Math.min(.05, (t - last) / 1000); last = t;
-    update(dt); draw();
+    if (!BS.paused) update(dt); // frozen behind the pause card
+    draw();
     requestAnimationFrame(frame);
   }
 
@@ -546,6 +547,7 @@
   window.addEventListener('resize', resize);
   BS.init({
     id: 'stack-up',
+    score: () => score, // shown on the pause card
     tagline: 'Build your AI stack. It is only as strong as the context it stands on.',
     onStart: start,
     tutorial: TUTORIAL,

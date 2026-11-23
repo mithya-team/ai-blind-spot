@@ -137,6 +137,12 @@
   .g.sorted { box-shadow: inset 0 0 0 1.5px var(--c); }
   .empty { padding: 34px 20px; text-align: center; border-radius: 20px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); color: var(--dim); font-size: 14.5px; line-height: 1.5; }
   .note { font-size: 12px; color: var(--faint); text-align: center; margin-top: 20px; line-height: 1.6; }
+  /* OpenText's line, verbatim, under everything (under the prizes and QR code on wide screens and the TV). */
+  .otfoot { margin: calc(22 * var(--u)) 0 0; font-size: calc(15 * var(--u)); font-weight: 600; line-height: 1.35; letter-spacing: -.01em; text-align: center; text-wrap: balance; color: var(--fg); }
+  .otfoot b { font-weight: 700; background: linear-gradient(90deg, #4fa3ff, #1968ff 45%, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  /* A new score just landed on this row. */
+  @keyframes fresh { 0%, 35% { box-shadow: inset 0 0 0 calc(2 * var(--u)) rgba(143,176,255,.95), 0 0 calc(34 * var(--u)) rgba(143,176,255,.5); filter: brightness(1.35); } 100% { filter: none; } }
+  #rows li.fresh { animation: fresh 3.4s ease-out both; }
 
   /* ---- Wide screens and TVs: a real table, prizes and the QR code on the right; everything scales with --u ---- */
   @media (min-width: 1100px) {
@@ -229,10 +235,11 @@
   <aside class="side">
     <section class="prizes" id="prizesD" aria-label="Prizes"></section>
     <div class="scan"><img src="icons/qr-play.svg" alt="QR code that opens the games"><div><b>Scan to play</b><span>Point your phone's camera at the code. Three quick games, three attempts each.</span></div></div>
+    <p class="otfoot">We Give Clients <b>Trusted Context &amp; Connected Data</b> for AI Outcomes.</p>
   </aside>
 </div>
-<script src="shared/config.js?v=21"></script>
-<script src="shared/common.js?v=21"></script>
+<script src="shared/config.js?v=22"></script>
+<script src="shared/common.js?v=22"></script>
 <script>
   const LOOK = {
     'stack-up': { acc: '#8ff0c0', short: 'Stack Up' },
@@ -284,6 +291,7 @@
     el.querySelector('span').textContent = s.state === 'offline' ? 'Reconnecting' : 'Live';
   }
 
+  let seen = null;
   function render(animate) {
     const sort = by(), all = BS.overall();
     const boards = {}; for (const g of games) boards[g] = BS.board(g); // per game, best first; board rows carry the themed stats
@@ -295,7 +303,10 @@
       rows = rows.map(r => ({ ...r, rank: order.has(r.key) ? order.get(r.key) + 1 : null }));
     }
     const leader = {}; for (const g of games) leader[g] = boards[g][0] && boards[g][0].key;
-    const overallRank = new Map(all.map((r, i) => [r.key, i + 1])); // AI Ladder titles always follow the total
+    // A row lights up when its player's best scores have changed since the last look (new player or new best).
+    const sig = r => games.map(g => (r.parts[g] ? r.parts[g].raw : '')).join('|');
+    const fresh = new Set(); if (seen && !animate) for (const r of all) if (seen.get(r.key) !== sig(r)) fresh.add(r.key);
+    seen = new Map(all.map(r => [r.key, sig(r)]));
 
     document.getElementById('cnt').textContent = all.length ? BS.pl(all.length, 'player') : '';
     const sortBtns = [['total', 'Total', '#eef1f8'], ...games.map(g => [g, BS.GAMES[g].title, LOOK[g].acc])];
@@ -313,8 +324,8 @@
         return `<span class="g${part ? '' : ' none'}${lead ? ' lead' : ''}${g === sort ? ' sorted' : ''}" style="--c:${LOOK[g].acc}"><span class="lbl">${LOOK[g].short}</span>${lead ? CROWN : ''}<b>${part ? BS.fmt(part.pts) : '–'}</b>${part ? `<small>best ${BS.fmt(part.raw)}</small>` : ''}</span>`;
       }).join('');
       const medal = r.rank && r.rank <= 3 ? ' p' + r.rank : '';
-      return `<li class="${medal}" style="--i:${i}"><span class="pos">${r.rank || '–'}</span>
-        ${(rg => `<span class="who"><b><span class="nm">${BS.esc(r.name)}</span>${rg ? `<i class="rung r${rg.n} in">${rg.name}</i>` : ''}</b><small>${BS.esc(r.company)}</small>${rg ? `<i class="rung r${rg.n} own">${rg.name}</i>` : ''}</span>`)(BS.rung(overallRank.get(r.key), all.length))}
+      return `<li class="${medal}${fresh.has(r.key) ? ' fresh' : ''}" style="--i:${i}"><span class="pos">${r.rank || '–'}</span>
+        ${(rg => `<span class="who"><b><span class="nm">${BS.esc(r.name)}</span>${rg ? `<i class="rung r${rg.n} in">${rg.name}</i>` : ''}</b><small>${BS.esc(r.company)}</small>${rg ? `<i class="rung r${rg.n} own">${rg.name}</i>` : ''}</span>`)(BS.rung(r.played))}
         ${st ? `<span class="chips" style="--c:${LOOK[sort].acc}"><i>${BS.esc(BS.GAMES[sort].title)}</i>${BS.GAMES[sort].line(st.stats || {}).split(' · ').map(c => `<span>${BS.esc(c)}</span>`).join('')}</span>` : ''}
         <span class="games">${cells}</span>
         <span class="tot">${BS.fmt(r.score)}<small>total</small></span></li>`;
@@ -322,7 +333,7 @@
 
     document.getElementById('note').innerHTML = (sort === 'total' ? 'Each game is worth up to 1,000 points: the top score in a game gets 1,000 and everyone else is scaled against it. The prizes go by the total.' : `Ranked by ${BS.esc(BS.GAMES[sort].title)}. Tap Total to go back.`) +
       ' Small figures are each player\'s best score. On a tie, whoever got there first ranks higher.' +
-      ' Titles follow OpenText\'s AI Ladder: the top quarter are Agentic Enterprise, then Composable AI, In-App Agents and In-App AI.' +
+      ' Titles follow OpenText\'s AI Ladder and are earned by playing, not by rank: one rung for signing in and one for each game played.' +
       (BS.demo ? '<br>Showing invented sample players (?demo).' : BS.sync.remote ? '' : '<br>Prototype: this shows scores saved on this device.');
     paintPrizes(all); paintLive();
     if (screen) fitRows();

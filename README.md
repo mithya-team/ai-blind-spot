@@ -67,7 +67,6 @@ shared/common.css   Styles for the shared cards (intro, tutorial, results)
 shared/ot-icon.png  OpenText "ot" icon (from their partner brand guide)
 icons/              Favicons and home-screen icon, made from the OpenText "ot" icon
 og/                 Share images (1200 x 630), one per page, for link previews
-partners/           Partner logos from OpenText's ecosystem slide (saved, not used yet)
 tools/og/           Generator for the share images (see "Share images and icons")
 icons/qr-play.svg   QR code to the live site, shown on computers and the TV
 supabase/schema.sql Database setup for the shared leaderboard
@@ -81,7 +80,7 @@ The AWS and Capgemini marks are inline SVG paths inside `shared/common.js` (`LOG
 
 ## How a player moves through it
 
-1. **`index.html`**: title, one-line description, full sponsor logos, and "Who's playing?".
+1. **`index.html`**: title, one-line description ("about 90 seconds each"), full sponsor logos, a prize teaser built from `shared/config.js` that links to the leaderboard, and "Who's playing?".
    - New players type first name and company (both required).
    - Returning players pick themselves from "Played before? Pick your name". The list filters as they type a first name.
    - The "pick your name" list only shows people who signed in **on this device**. With a shared leaderboard, listing everyone would let a player pick someone else's name.
@@ -141,12 +140,14 @@ OpenText's current positioning (two slides shared by the client in November 2026
 Each game carries one of these: Golden Thread is *connected data*, Deep Dive is *context as oxygen*, Clear Cut is *governed*, Stack Up is *the six layers*, Vital Signs is *the body*.
 
 **OpenText's story deck (November 2026, in the project folder, not committed)** adds:
-- **The line, used verbatim:** "We Give Clients Trusted Context & Connected Data for AI Outcomes." It appears on the first page (phones) and the computer intro, with their blue-to-violet gradient on the middle phrase (`OT_LINE` in `shared/common.js`). Don't paraphrase it.
-- **Two facts** (`FACTS`): 88% of AI pilots never reach production (IDC), and 77% of executives say a fifth of their data or less is usable by AI. They appear under the takeaway on every results card (alternating) and on the computer intro. The deck gives no source for the 77% figure; confirm one before the event.
+- **The line, used verbatim:** "We Give Clients Trusted Context & Connected Data for AI Outcomes." It appears where it lands as the answer to what was just played: on the results card after a player's last attempt at a game, as the footer of the leaderboard (phones, computers and the TV), and on the computer "play on your phone" screen (`OT_LINE` in `shared/common.js`). It is deliberately not on the sign-in page: the event has a no-pitch rule and that is the first screen a customer reads. Don't paraphrase it.
+- **Two facts** (`FACTS`): 88% of AI pilots never reach production (IDC), and 77% of executives say a fifth of their data or less is usable by AI. Both are on the computer intro. On results cards each game shows its own deck line under the player's takeaway (`deck` in `GAMES`); Deep Dive shows the 88% fact instead (`fact`). The deck gives no source for the 77% figure; confirm one before the event.
 - **Trusted context vs connected data:** connected data tells an agent what is happening (Golden Thread); trusted context tells it whether it's safe to act (Clear Cut's seals). Vital Signs' oxygen is both.
-- **The AI Ladder** (`LADDER`, `rung()`): leaderboard rows and the games-page standing carry a title by overall rank: top quarter Agentic Enterprise, then Composable AI, In-App Agents, In-App AI.
+- **The AI Ladder** (`LADDER`, `rung(played)`): climbed by playing, never by rank. Signing in is In-App AI and each game played is one more rung, so three games reach Agentic Enterprise. The games page shows the four rungs and what takes the player up one; leaderboard rows carry the title. (It was by rank quartile until 2026-11-23. That labelled a customer's company "In-App AI" on a public screen for losing a phone game, and gave a lone player with 0 points the top title.)
 - **AI is a team sport:** Stack Up shows the hosts' logo tiles on the layers OpenText's deck gives them: AWS on Infrastructure, OpenText on Context & Connected Data, Capgemini on Orchestration (`TILE_SRC`).
-- **The ecosystem slide's partner logos** are saved in `partners/` (taken from the deck) but not used in the games: the client chose to keep only the three hosts' logos in Stack Up (2026-11-21).
+- **The ecosystem slide's partner logos** are not used and not in this repo (removed 2026-11-23; they are other companies' marks from an internal deck). The client chose to keep only the three hosts' logos in Stack Up. Never put a partner's logo on an obstacle.
+- **One idea per game** (`idea`, `caption`, `deck` in `GAMES`): Stack Up is the AI stack, Vital Signs is context as oxygen, Golden Thread is connected data ("tells an agent what is happening"), Deep Dive is content out of reach, Clear Cut is trusted context ("tells an agent whether it's safe to act"). The idea is the eyebrow on the game's card, the caption is on screen all through play, and the deck line sits under the takeaway on the results card.
+- **"Your agent"** is the thing that acts (the diver in Deep Dive, what the thread and the seals serve); "your AI" is the whole stack or body.
 - **Prize name:** "OpenText Aviator socks" (Aviator is OpenText's AI brand).
 
 Every game is one HTML file, drawn on a `<canvas>`. They share the same contract with the shell:
@@ -211,6 +212,11 @@ The event should show three games (12 to 20 executives, each game has four round
 Then clear test data (see [Resetting a device](#resetting-a-device)). Deep Dive and Vital Signs both use the oxygen idea, so keeping both would repeat it; the suggestion to the client was to keep one of them.
 
 ### Shared game behaviour
+- **Every frame explains itself (2026-11-23).** The games are also watched over a shoulder, photographed and screenshotted, so nothing relies on the player having read the tutorial:
+  - The shell keeps a strip at the bottom of the screen all through play: the game's `caption`, then the three host marks, "The AI Blind Spot", the game's name and the attempt. Games keep anything the player must touch above `BS.SAFE_BOTTOM`.
+  - Objects carry their own short labels (walls, seals, body parts, fragments). Labels are part of the object, two or three words, and never float over the path the player is steering through.
+  - **Pause:** the small button in the strip, or putting the phone down (page hidden), freezes the game behind a card with the game's name, its caption, the attempt and the score so far. Each game's frame loop skips `update` while `BS.paused` is true, and passes `score: () => …` to `BS.init` for the card.
+  - The results card carries the hosts, the event, the game and the player's name, so a screenshot of it stands alone.
 - **Performance:**
   - Device pixel ratio is capped at 2, and the frame time step at 0.05 s.
   - Glows and sprites are pre-rendered to offscreen canvases, with no per-frame `shadowBlur` and no `ctx.filter`.
@@ -241,11 +247,11 @@ All of it runs synchronously against a local store through two private functions
 Every page links `shared/common.js?v=N` and `shared/common.css?v=N`. **When you change anything in `shared/`, bump `N` in every HTML file**, or phones keep the old copy:
 
 ```bash
-sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=16"#g' *.html   # current is v=15; macOS sed, drop '' on Linux
+sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=23"#g' *.html   # current is v=22; macOS sed, drop '' on Linux
 ```
 
 ### Adding or changing a game
-1. Add an entry to `GAMES` in `common.js`: title, href, blurb, meaning rows, stats and line.
+1. Add an entry to `GAMES` in `common.js`: title, href, idea, caption, deck (or fact), blurb, meaning rows, stats and line.
 2. Create the page with `BS.init(...)` and call `BS.finish(...)` with the stats keys you declared.
 3. Add a card to `games.html`, and a tab look to `leaderboard.html` (`LOOK`).
 

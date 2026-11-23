@@ -63,6 +63,18 @@
   .sub { font-size: 14.5px; line-height: 1.45; color: var(--dim); margin: 0; }
   .standing { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 11px 14px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); font-size: 13.5px; color: var(--dim); text-decoration: none; }
   .standing b { color: var(--fg); font-weight: 600; }
+  /* OpenText's AI Ladder, climbed by playing: sign in, then one rung for each game played. */
+  .ladder { margin: 0 0 16px; padding: 12px 14px 13px; border-radius: 16px; background: var(--glass); border: 1px solid var(--line); }
+  .ladder .lh { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.35; color: var(--dim); }
+  .ladder .lh b { color: var(--fg); font-weight: 600; }
+  .ladder .lh a { flex: none; color: var(--halo, #8fb0ff); font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .ladder ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; align-items: end; }
+  .ladder li { font-size: 10.5px; font-weight: 600; line-height: 1.2; text-align: center; color: var(--faint); text-wrap: balance; }
+  .ladder li::before { content: ""; display: block; height: calc(5px + var(--k) * 4px); border-radius: 3px; background: rgba(255,255,255,.12); margin-bottom: 6px; }
+  .ladder li.on { color: var(--fg); }
+  .ladder li.on::before { background: linear-gradient(90deg, #4fa3ff, #1968ff 60%, #8b5cf6); }
+  .ladder li.cur::before { box-shadow: 0 0 12px rgba(79,163,255,.75); }
+  .game .eye { display: block; margin-bottom: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; opacity: .72; }
 
   /* ---- Game cards ---- */
   #games { display: grid; gap: 14px; }
@@ -154,6 +166,10 @@
     h1 { font-size: clamp(52px, 4.8vw, 68px); margin-bottom: 10px; }
     .sub { font-size: 16.5px; }
     .standing { margin: 0 0 4px; padding: 12px 16px; gap: 18px; font-size: 14.5px; white-space: nowrap; }
+    .ladder { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 28px; align-items: center; margin: 0 0 20px; padding: 14px 20px; }
+    .ladder .lh { margin: 0; font-size: 14.5px; }
+    .ladder li { font-size: 12.5px; }
+    .game .eye { font-size: 11.5px; margin-bottom: 10px; }
     #games { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; flex: 1; }
     .game { padding: 0; min-height: 0; border-radius: 32px; }
     .game:hover { transform: translateY(-6px); }
@@ -201,6 +217,10 @@
   <div class="headrow">
     <div><h1>Pick a game</h1><p class="sub">Three attempts at each game. Your best one counts.</p></div>
     <a class="standing" id="standing" href="leaderboard.html" hidden></a>
+  </div>
+  <div class="ladder" id="ladder" aria-label="The AI Ladder">
+    <div class="lh"><span id="ladline"></span><a href="leaderboard.html">Prizes →</a></div>
+    <ol id="ladrungs"></ol>
   </div>
   <div id="games">
   <a class="game g4" href="stack-up.html">
@@ -302,18 +322,25 @@
   </div>
   <p class="note">Prototype: scores are saved on this device only for now.</p>
 </div>
-<script src="shared/config.js?v=21"></script>
-<script src="shared/common.js?v=21"></script>
+<script src="shared/config.js?v=22"></script>
+<script src="shared/common.js?v=22"></script>
 <script>
   if (!BS.hasPlayer()) location.replace('index.html');
   document.getElementById('logos').innerHTML = BS.LOGOS;
+  // Each card: the idea the game is about, and its one-line description, from the shared registry.
+  document.querySelectorAll('#games .game').forEach(card => {
+    const meta = BS.GAMES[card.querySelector('.status').dataset.game], t = card.querySelector('.t');
+    if (!meta) return;
+    t.querySelector('p').textContent = meta.blurb;
+    if (meta.idea && !t.querySelector('.eye')) t.insertAdjacentHTML('afterbegin', `<span class="eye">${BS.esc(meta.idea)}</span>`);
+  });
   function render() {
     const p = BS.player(), me = (p.name + '|' + p.company).toLowerCase();
     document.querySelectorAll('.whoname').forEach(el => { el.textContent = p.name + ' · ' + p.company; });
     document.querySelectorAll('.status').forEach(el => {
       const id = el.dataset.game, g = BS.progress(id), mode = BS.nextMode(id), b = BS.best(id), left = BS.MAX_RUNS - g.runs.length;
       let text, cta;
-      if (mode === 'ranked' && !g.runs.length) { text = 'Three attempts · best counts'; cta = 'Play attempt 1 of 3'; }
+      if (mode === 'ranked' && !g.runs.length) { text = 'Not played yet · about 90 sec'; cta = 'Play attempt 1 of 3'; }
       else if (mode === 'ranked') { text = `${left} ${left === 1 ? 'attempt' : 'attempts'} left · Best ${BS.fmt(b)}`; cta = `Play attempt ${g.runs.length + 1} of ${BS.MAX_RUNS}`; }
       else { text = `Complete · Best ${BS.fmt(b)}`; cta = 'See your result'; }
       const filled = g.runs.length;
@@ -322,8 +349,11 @@
     });
     const all = BS.overall(), rank = all.findIndex(r => r.key === me) + 1, st = document.getElementById('standing');
     st.hidden = !rank;
-    const rg = BS.rung(rank, all.length);
-    if (rank) st.innerHTML = `<span>Your overall standing</span><b>#${rank} of ${all.length} · ${BS.fmt(all[rank - 1].score)} pts${rg ? ` · ${rg.name}` : ''} →</b>`;
+    if (rank) st.innerHTML = `<span>Your overall standing</span><b>#${rank} of ${all.length} · ${BS.fmt(all[rank - 1].score)} pts →</b>`;
+    // The AI Ladder: where this player is, and what takes them up a rung.
+    const played = Object.keys(BS.GAMES).filter(id => BS.progress(id).runs.length).length, rg = BS.rung(played);
+    document.getElementById('ladrungs').innerHTML = BS.LADDER.map((n, i) => `<li class="${i < rg.n ? 'on' : ''}${i === rg.n - 1 ? ' cur' : ''}" style="--k:${i}">${n}</li>`).join('');
+    document.getElementById('ladline').innerHTML = `<b>AI Ladder · ${BS.esc(rg.name)}.</b> ` + (rg.next ? `Play ${played ? 'one more game' : 'your first game'} to reach ${BS.esc(rg.next)}.` : 'You\u2019re at the top.');
   }
   document.querySelectorAll('.notme').forEach(b => { b.hidden = !BS.CFG.allowSwitchPlayer; b.onclick = () => { BS.clearPlayer(); location.href = BS.touch ? 'index.html' : 'index.html?signin'; }; });
   const cards = document.querySelectorAll('#games .game').length;

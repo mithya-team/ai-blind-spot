@@ -48,9 +48,10 @@
     { big: '88%', text: 'of AI pilots never reach production.', src: 'IDC' },
     { big: '77%', text: 'of executives say a fifth of their data, or less, is usable by AI.', src: '' },
   ];
-  /* OpenText's AI Ladder, used as titles on the leaderboard: by overall rank, top quarter first. */
+  /* OpenText's AI Ladder, climbed by playing: signing in is the first rung and each game played is one more,
+     so three games reach the top. It is never a ranking: it is shown beside company names on a public screen. */
   const LADDER = ['In-App AI', 'In-App Agents', 'Composable AI', 'Agentic Enterprise'];
-  const rung = (rank, n) => { if (!rank || !n) return null; const q = (rank - 1) / n; const k = q < .25 ? 4 : q < .5 ? 3 : q < .75 ? 2 : 1; return { n: k, name: LADDER[k - 1] }; };
+  const rung = played => { const k = Math.min(LADDER.length, 1 + Math.max(0, played | 0)); return { n: k, name: LADDER[k - 1], next: k < LADDER.length ? LADDER[k] : null }; };
   const LOGOS = `<span class="bs-logos" aria-label="OpenText, AWS and Capgemini">
     <span class="bs-lg bs-ot"><img src="shared/ot-icon.png" alt="OpenText"></span>
     <svg class="bs-lg" viewBox="0 0 24 24" role="img" aria-label="AWS"><rect width="24" height="24" fill="#232F3E"/><g transform="translate(12 12.4) scale(.68) translate(-12 -12)"><path fill="#fff" d="${AWS_TEXT}"/><path fill="#FF9900" d="${AWS_SMILE}"/></g></svg>
@@ -61,6 +62,7 @@
   const GAMES = {
     'stack-up': {
       title: 'Stack Up', href: 'stack-up.html',
+      idea: 'The AI stack', caption: 'Every layer is only as wide as the one beneath it', deck: 'No single company owns the AI stack.',
       blurb: 'Build the six layers of your AI stack. Every layer is only as wide as the one beneath it.',
       meaning: [
         ['The stack', 'Six layers, bottom to top: infrastructure (AWS), systems of record, context & connected data (OpenText), language models, orchestration (Capgemini), agents.'],
@@ -78,6 +80,7 @@
     },
     'vital-signs': {
       title: 'Vital Signs', href: 'vital-signs.html',
+      idea: 'Context is oxygen', caption: 'Context is the oxygen of AI', deck: 'Trusted context and connected data are the oxygen of AI.',
       blurb: 'Context is the oxygen of AI. Keep the brain, nerves and muscles breathing.',
       meaning: [
         ['The body', 'Your AI. The brain is its models, the nervous system is orchestration, the muscles are its agents.'],
@@ -95,11 +98,12 @@
     },
     'golden-thread': {
       title: 'Golden Thread', href: 'golden-thread.html',
-      blurb: 'Connect scattered, unstructured content into one answer. Keep clear of the blind spots.',
+      idea: 'Connected data', caption: 'Connected data tells an agent what is happening', deck: 'Connected data tells an agent what is happening.',
+      blurb: 'Connect scattered, unstructured content into one view for your agent. Keep clear of the blind spots.',
       meaning: [
         ['Fragments', 'Unstructured content: contracts, emails, invoices, tickets and customer records, scattered across your systems.'],
-        ['The thread', 'Connected data. Linking fragments gives your AI context, and a longer thread means a better answer.'],
-        ['Blind spots', 'Information your AI can’t reach. Touch one and the connection breaks.'],
+        ['The thread', 'Connected data. It tells your agent what is happening, and a longer thread means a better answer.'],
+        ['Blind spots', 'Information your agent can’t reach. Touch one and the connection breaks.'],
         ['Full picture', 'All five kinds in one thread: the complete view of a customer. Double points.'],
       ],
       stats: [
@@ -112,28 +116,30 @@
     },
     'deep-dive': {
       title: 'Deep Dive', href: 'deep-dive.html',
-      blurb: 'Most of what your company knows sits below the surface. Context is your AI\u2019s oxygen: how deep can it go?',
+      idea: 'Content out of reach', caption: 'Most of what your company knows is below the surface', fact: 0,
+      blurb: 'Most of what your company knows sits below the surface. Context is your agent\u2019s oxygen: how deep can it go?',
       meaning: [
-        ['The dive', 'Down through the layers of your business: cloud apps, shared drives, email archives, legacy apps and systems of record.'],
-        ['Context', 'Your AI\u2019s oxygen, shown as its glow. It runs down unless it reaches more content.'],
-        ['Documents', 'Each one you collect is content your AI can now use. It tops up your context.'],
-        ['Walls', 'Legacy systems that block access. Hitting one drains your context.'],
+        ['The dive', 'Your agent, heading down through the layers of your business: cloud apps, shared drives, email archives, legacy apps and systems of record.'],
+        ['Context', 'Your agent\u2019s oxygen, shown as its glow. It runs down unless it reaches more content.'],
+        ['Documents', 'Each one you collect is content your agent can now use. It tops up your context.'],
+        ['Walls', 'Content you can\u2019t get into: siloed apps, locked folders, sealed mailboxes, legacy systems. Hitting one drains your context.'],
       ],
       stats: [
         { k: 'depth', l: 'Deepest point reached', unit: ' m' },
         { k: 'layers', l: 'Layers opened up', of: 6 },
         { k: 'docs', l: 'Documents recovered' },
-        { k: 'hits', l: 'Legacy walls hit', bad: true },
+        { k: 'hits', l: 'Walls hit', bad: true },
       ],
       line: s => `Down to ${s.layerName || fmt(s.depth || 0) + ' m'} · ${pl(s.docs || 0, 'document')} · ${pl(s.hits || 0, 'wall')} hit`,
     },
     'clear-cut': {
       title: 'Clear Cut', href: 'clear-cut.html',
-      blurb: 'Cut through the barriers between your AI and your content. Never cut governance.',
+      idea: 'Trusted context', caption: 'Trusted context tells an agent whether it\u2019s safe to act', deck: 'Trusted context tells an agent whether it\u2019s safe to act.',
+      blurb: 'Cut through the barriers between your agent and your content. Never cut governance.',
       meaning: [
         ['Frosted panes', 'The barriers around your unstructured content: silos, legacy apps, hidden data and scattered files.'],
-        ['Cutting', 'Clearing a barrier makes the document behind it visible to your AI.'],
-        ['Gold seals', 'Trusted context: whether data is secure, compliant and cleared for use. Tap to approve. Never cut through one.'],
+        ['Cutting', 'Clearing a barrier makes the document behind it visible to your agent.'],
+        ['Gold seals', 'Trusted context: where data came from, who owns it, whether it\u2019s current and cleared for use. Tap to approve. Never cut through one.'],
       ],
       stats: [
         { k: 'cleared', l: 'Barriers cleared' },
@@ -414,6 +420,7 @@
   }
 
   const BS = {
+    paused: false, playing: false, SAFE_BOTTOM: 64,
     params, fmt, esc, pl, GAMES, MAX_RUNS, LOGOS, LOGOS_FULL, CFG, sync, gated: GATED, touch, demo: DEMO, unlocked: unlocked(), TILE_SRC, OT_LINE, FACTS, LADDER, rung,
     ease: t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3),
     rr(c, x, y, w, h, r) {
@@ -575,16 +582,19 @@
         <div class="demo"><canvas id="bs-tcv"></canvas></div>
         <div class="gb"><h2 id="bs-ttitle"></h2>
         <p class="ttext" id="bs-ttext"></p>
+        <p class="tidea" id="bs-tidea"></p>
         <div class="dots" id="bs-tdots"></div>
         <div class="tbtns"><button class="btn ghost" id="bs-tback" type="button">Back</button><button class="btn" id="bs-tnext" type="button">Next</button></div></div>
       </div>`);
       this.ovEnd = mk('ov', `<div class="card wide end"><div class="ga">
+        <div class="ebrand">${LOGOS}<span>The AI Blind Spot · ${meta.title}</span></div>
         <div class="kicker" id="bs-emode"></div>
         <div class="headline" id="bs-head"></div>
         <div class="big" id="bs-score"></div>
         <div class="label" id="bs-label"></div>
         <p class="theme" id="bs-theme"></p>
         <p class="fact" id="bs-fact"></p>
+        <p class="otl" id="bs-otl" hidden>${OT_LINE.pre} <b>${esc(OT_LINE.key)}</b> ${OT_LINE.post}</p>
         <div class="statgrid" id="bs-stats"></div>
         <div id="bs-epips"></div>
         <button class="btn" id="bs-next" type="button"></button></div>
@@ -592,7 +602,25 @@
         <ol class="lb" id="bs-lb"></ol>
         <div class="links"><a class="link" href="leaderboard.html">Full leaderboard</a><a class="link" href="games.html">All games</a></div></div>
       </div>`);
-      this.pill = mk('bs-mode', '');
+      /* Shown all through play, so a glance, a photo or a screenshot explains itself:
+         the game's idea in one line, then the hosts, the event, the game and the attempt. */
+      this.pill = mk('bs-strip', `<p class="bs-cap">${esc(meta.caption || '')}</p>
+        <div class="bs-mode">${LOGOS}<span class="ev">The AI Blind Spot</span><span class="gm">${meta.title}</span><span id="bs-att"></span>
+        <button id="bs-pause" type="button" aria-label="Pause"><i></i><i></i></button></div>`);
+      /* Pause: when the phone is put down or the tab is hidden, or from the small button. The game freezes behind a
+         card that says what the game is about. Each game skips its update while BS.paused is true. */
+      this.ovPause = mk('ov pause', `<div class="card">
+        ${LOGOS}
+        <div class="kicker">The AI Blind Spot · Paused</div>
+        <h1>${meta.title}</h1>
+        <p class="pcap">${esc(meta.caption || '')}.</p>
+        <div class="pstat" id="bs-pstat"></div>
+        <button class="btn" id="bs-resume" type="button">Resume</button>
+        <p class="who">${esc(p.name)} · ${esc(p.company)}</p>
+      </div>`);
+      this.pill.querySelector('#bs-pause').onclick = () => this.pause();
+      this.ovPause.querySelector('#bs-resume').onclick = () => this.resume();
+      document.addEventListener('visibilitychange', () => { if (document.hidden) this.pause(); });
 
       const snd = this.ovIntro.querySelector('#bs-snd');
       const paintSnd = () => {
@@ -622,6 +650,21 @@
       if (params.has('tut')) { this.tutorial(); return; }
       this.showIntro();
     },
+    pause() {
+      if (!this.playing || this.paused) return;
+      this.paused = true;
+      const sc = typeof this.cfg.score === 'function' ? this.cfg.score() : null;
+      this.ovPause.querySelector('#bs-pstat').innerHTML = `<div><b>${esc(this.modeLabel(this.cfg.id).replace('Attempt ', ''))}</b><span>Attempt</span></div>` +
+        (sc == null ? '' : `<div><b>${fmt(sc)}</b><span>Score so far</span></div>`);
+      this.pill.classList.remove('show');
+      this.ovPause.classList.add('show');
+    },
+    resume() {
+      if (!this.paused) return;
+      this.paused = false;
+      this.ovPause.classList.remove('show');
+      if (this.playing) this.pill.classList.add('show');
+    },
     showIntro() {
       const id = this.cfg.id, mode = this.nextMode(id), go = this.ovIntro.querySelector('#bs-go');
       this.ovIntro.querySelector('#bs-ipips').innerHTML = this.pips(id, mode);
@@ -633,7 +676,7 @@
       this.ovIntro.classList.add('show'); this.ovIntro.scrollTop = 0;
     },
     tutorial() {
-      const steps = this.cfg.tutorial || [], o = this.ovTut, $ = s => o.querySelector(s);
+      const steps = this.cfg.tutorial || [], o = this.ovTut, $ = s => o.querySelector(s), meta0 = GAMES[this.cfg.id];
       if (!steps.length) { this.begin(); return; }
       this.ovIntro.classList.remove('show');
       o.classList.add('show');
@@ -645,6 +688,7 @@
         $('#bs-tstep').textContent = `Step ${i + 1} of ${steps.length}`;
         $('#bs-ttitle').textContent = s.title;
         $('#bs-ttext').textContent = s.text;
+        $('#bs-tidea').textContent = last && meta0.caption ? meta0.caption + '.' : '';
         $('#bs-tdots').innerHTML = steps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('');
         $('#bs-tback').style.visibility = i ? 'visible' : 'hidden';
         $('#bs-tnext').textContent = !last ? 'Next' : mode === 'ranked' ? `Play attempt ${this.progress(this.cfg.id).runs.length + 1} of ${MAX_RUNS}` : 'Done';
@@ -676,8 +720,9 @@
       this.mode = mode;
       this.ovIntro.classList.remove('show');
       if (document.activeElement) document.activeElement.blur();
-      this.pill.textContent = this.modeLabel(id, mode);
+      this.pill.querySelector('#bs-att').textContent = this.modeLabel(id, mode);
       this.pill.classList.add('show');
+      this.playing = true; this.paused = false;
       this.sfx('start');
       this.cfg.onStart(mode);
     },
@@ -687,10 +732,12 @@
       const id = this.cfg.id, meta = GAMES[id], mode = this.mode || 'ranked';
       const modeText = this.modeLabel(id, mode);
       const res = this.record(id, mode, r.score, r.stats || {});
+      this.playing = false; this.resume();
       this.pill.classList.remove('show');
       this.sfx(r.win || (res.run.score > 0 && (res.prevBest == null || res.run.score > res.prevBest)) ? 'win' : 'end');
       const $ = s => this.ovEnd.querySelector(s);
-      $('#bs-emode').textContent = modeText;
+      const who = this.player();
+      $('#bs-emode').textContent = `${who.name} · ${who.company} · ${modeText}`;
       $('#bs-head').textContent = r.headline || 'Game over';
       countUp($('#bs-score'), 0, r.score, 1100, fmt, 250);
       const st = res.standing;
@@ -700,8 +747,9 @@
       $('#bs-label').textContent = label;
       $('#bs-label').classList.toggle('best', isBest);
       $('#bs-theme').textContent = r.theme || '';
-      const f = FACTS[(this.progress(id).runs.length + Object.keys(GAMES).indexOf(id)) % FACTS.length];
-      $('#bs-fact').innerHTML = `<b>${f.big}</b> ${esc(f.text)}${f.src ? ` <small>${esc(f.src)}</small>` : ''}`;
+      // Under the player's own takeaway: the game's idea in the deck's words (or, for Deep Dive, the deck's headline fact).
+      const f = meta.fact != null ? FACTS[meta.fact] : null;
+      $('#bs-fact').innerHTML = f ? `<b>${f.big}</b> ${esc(f.text)}${f.src ? ` <small>${esc(f.src)}</small>` : ''}` : esc(meta.deck || '');
       const s = r.stats || {};
       $('#bs-stats').innerHTML = meta.stats.map(x => `<div class="${x.bad ? 'bad' : ''}${x.bad && !s[x.k] ? ' zero' : ''}"><b><em style="font-style:normal">${s[x.k] == null ? '—' : x.raw ? esc(s[x.k]) : fmt(s[x.k])}</em>${x.of && s[x.k] != null ? `<small> of ${x.of}</small>` : ''}${x.unit && s[x.k] != null ? `<small>${x.unit}</small>` : ''}</b><span>${x.l}</span></div>`).join('');
       meta.stats.forEach((x, i) => {
@@ -711,6 +759,7 @@
         countUp(el, x.from != null ? x.from : 0, v, 800, x.raw ? n => String(Math.round(n)) : fmt, 500 + i * 110);
       });
       const next = this.nextMode(id);
+      $('#bs-otl').hidden = next !== 'done'; // OpenText's line, once this game's last attempt is played
       $('#bs-epips').innerHTML = this.pips(id, next);
       $('#bs-next').textContent = next === 'done' ? 'See the full leaderboard' : `Play attempt ${this.progress(id).runs.length + 1} of ${MAX_RUNS}`;
       this.paintEndBoard();

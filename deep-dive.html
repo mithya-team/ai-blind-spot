@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Deep Dive</title>
-<meta name="description" content="Context is your AI’s oxygen. How deep can it go before it runs out?">
+<meta name="description" content="Context is your agent’s oxygen. How deep can it go before it runs out?">
 <link rel="icon" href="icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -14,7 +14,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="The AI Blind Spot">
 <meta property="og:title" content="Deep Dive · The AI Blind Spot">
-<meta property="og:description" content="Context is your AI’s oxygen. How deep can it go before it runs out?">
+<meta property="og:description" content="Context is your agent’s oxygen. How deep can it go before it runs out?">
 <meta property="og:url" content="https://mithya-team.github.io/ai-blind-spot/deep-dive.html">
 <meta property="og:image" content="https://mithya-team.github.io/ai-blind-spot/og/deep-dive.png">
 <meta property="og:image:width" content="1200">
@@ -22,12 +22,12 @@
 <meta property="og:image:alt" content="Deep Dive, co-branded by OpenText, AWS and Capgemini">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Deep Dive · The AI Blind Spot">
-<meta name="twitter:description" content="Context is your AI’s oxygen. How deep can it go before it runs out?">
+<meta name="twitter:description" content="Context is your agent’s oxygen. How deep can it go before it runs out?">
 <meta name="twitter:image" content="https://mithya-team.github.io/ai-blind-spot/og/deep-dive.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=21">
+<link rel="stylesheet" href="shared/common.css?v=22">
 <style>
   :root {
     --bg: #071521; --fg: #e3f6ff; --accent: #7fe3ff; --on-accent: #04121c;
@@ -40,8 +40,8 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/config.js?v=21"></script>
-<script src="shared/common.js?v=21"></script>
+<script src="shared/config.js?v=22"></script>
+<script src="shared/common.js?v=22"></script>
 <script>
 (() => {
   const cv = document.getElementById('c');
@@ -65,6 +65,11 @@
     { from: 1975, name: 'Offline archives', style: 'cabinet', bg: [102, 70, 40], deep: [48, 32, 18], dark: [16, 10, 5], acc: [255, 218, 158] },
   ];
   const NL = LAYERS.length;
+  /* What a bystander reads in a still frame. WALL_TAG is lettered onto the walls of each layer (content your agent
+     can't get into); DOC_NAME is what a recovered document is, shown as it is collected. */
+  const WALL_TAG = ['Siloed app', 'Locked folder', 'Sealed mailbox', 'Legacy system', 'Closed system', 'Offline'];
+  const DOC_NAME = ['App record', 'Contract', 'Email', 'Legacy record', 'Customer record', 'Paper file'];
+  const OUT_LINE = 'Your agent ran out of context here';
   for (const e of LAYERS) {
     e.pool = e.bg.map(v => Math.min(255, v * 2.3 + 24)); // what the lantern's pool lights the water to
     e.lit = e.bg.map((v, k) => v * .5 + e.pool[k] * .5); // the layer with the lights on
@@ -102,6 +107,8 @@
     const cs = getComputedStyle(safeEl);
     SAFE_B = parseFloat(cs.paddingBottom) || 0; SAFE_T = parseFloat(cs.paddingTop) || 0;
     PY = H * .3;
+    const k = W >= 900 ? 1.2 : 1; // wall name plates: a little larger on a wide screen
+    if (k !== tagK) { tagK = k; retag(); }
     if (!running) { px = tx = W / 2; }
     px = clamp(px, PR, W - PR); tx = clamp(tx, PR, W - PR);
   }
@@ -166,11 +173,11 @@
     const layerName = LAYERS[layerNow].name; // the deepest layer reached
     let theme;
     if (won) theme = `All the way down with context to spare. ${BS.pl(frags, 'document')} recovered.`;
-    else if (hits >= 3 && hits > frags) theme = `Your AI ran out of context at ${layerName}. Legacy walls cut off its supply, and everything deeper stays a blind spot.`;
-    else theme = `Your AI ran out of context at ${layerName}. Without more content to reach, everything deeper is a blind spot.`;
+    else if (hits >= 3 && hits > frags) theme = `Your agent ran out of context at ${layerName}. Content it couldn\u2019t get into cut off its supply, and everything deeper stays a blind spot.`;
+    else theme = `Your agent ran out of context at ${layerName}. Without more content to reach, everything deeper is a blind spot.`;
     BS.finish({
       score: totalScore(),
-      headline: won ? 'All the way down' : 'Your AI ran out of context',
+      headline: won ? 'All the way down' : 'Your agent ran out of context',
       theme,
       stats: { depth: Math.floor(depthM()), layers: layerNow + 1, layerName, docs: frags, hits },
       win: won,
@@ -178,7 +185,7 @@
   }
   function endDark() {
     running = false; over = true;
-    banner = { m: depthM(), sub: 'Your AI went dark here', life: 2.6, max: 2.6 };
+    banner = { m: depthM(), sub: OUT_LINE, life: 2.6, max: 2.6 };
     setTimeout(finish, 1300);
   }
   function endWin() {
@@ -234,7 +241,8 @@
           it.taken = true; frags++; light = Math.min(100, light + 15);
           burst(it.x, it.y - depth, 10, C_PICK, 120);
           pop(it.x, PY - 46, '+context', 14, '#d4f6ff');
-          flies.push({ dx: it.x - px, dy: it.y - wy, k: 0 }); gotFx = 1; // the page spirals into the lantern
+          pop(it.x, PY - 64, DOC_NAME[docLayer(it)], 11, 'rgba(212,246,255,.82)');
+          flies.push({ dx: it.x - px, dy: it.y - wy, k: 0, layer: docLayer(it) }); gotFx = 1; // the page spirals into the lantern
           BS.sfx('pickup', { n: frags });
           BS.vibrate(8);
         }
@@ -599,8 +607,51 @@
     c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
   }
   const ROW_T = 4, ROW_B = 22, SH_OFF = 3000, rowCache = new Map(), rowPool = [];
+  /* Name plates: one per run of wall that is wide enough, lettered into the wall's own sprite so it lights and dims
+     with the wall. They sit on the wall's face, inside its outline, so the gaps and the collision shape read as before. */
+  const tagW = [];
+  let tagK = 1, tagVer = 0, tagG = null; // tagK: plates are lettered a little larger on a wide screen
+  const tagFont = () => `700 ${(8.5 * tagK).toFixed(1)}px Inter, sans-serif`;
+  const tagWidth = i => {
+    if (tagW[i] == null) { tagG = tagG || mkCanvas(4, 4).g; tagG.font = tagFont(); tagW[i] = tagG.measureText(trk(WALL_TAG[i])).width; }
+    return tagW[i];
+  };
+  const retag = () => { tagW.length = 0; tagVer++; rowCache.clear(); };
+  // once Inter has loaded, measure and letter again (anything painted earlier used the fallback face)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(retag);
+  function rowTags(r) {
+    if (r._tags && r._tv === tagVer) return r._tags;
+    const style = LAYERS[r.layer].style, tw = tagWidth(r.layer), k = tagK, out = [];
+    const cy = style === 'folder' ? 6 + (r.h - 6) / 2 : style === 'frame' ? r.h / 2 + 4.5 : r.h / 2;
+    for (const b of r.blocks) {
+      let lock = true, pw = tw + 26 * k;
+      if (b.w < pw + 10) { lock = false; pw = tw + 14 * k; }
+      if (b.w < pw + 8) continue;
+      const n = Math.max(1, Math.floor(b.w / 300)), seg = b.w / n; // a long wall says it more than once
+      for (let i = 0; i < n; i++) out.push({ x: b.x + seg * i + (seg - pw) / 2, w: pw, cy, lock });
+    }
+    r._tv = tagVer;
+    return r._tags = out;
+  }
+  const tagOver = (r, x0, x1) => rowTags(r).some(q => x1 > q.x - 2 && x0 < q.x + q.w + 2);
+  function paintTags(g, r) {
+    const L = LAYERS[r.layer], ink = rgb(mixc(L.acc, WHITE, .6)), k = tagK, th = 14 * k;
+    g.font = tagFont(); g.textAlign = 'left'; g.textBaseline = 'middle';
+    for (const q of rowTags(r)) {
+      const y = q.cy - th / 2;
+      BS.rr(g, q.x, y, q.w, th, th / 2); g.fillStyle = rgb(mixc(L.dark, [0, 0, 0], .25), .9); g.fill();
+      BS.rr(g, q.x + .5, y + .5, q.w - 1, th - 1, th / 2 - .5); g.strokeStyle = rgb(mixc(L.acc, WHITE, .25), .8); g.lineWidth = 1; g.stroke();
+      let tx = q.x + 7 * k;
+      if (q.lock) { // a small padlock
+        g.fillStyle = ink; BS.rr(g, tx, q.cy - k, 7 * k, 5.4 * k, 1.2); g.fill();
+        g.strokeStyle = ink; g.lineWidth = 1.2 * k; g.beginPath(); g.arc(tx + 3.5 * k, q.cy - 1.2 * k, 2.1 * k, Math.PI, 0); g.stroke();
+        tx += 12 * k;
+      }
+      g.fillStyle = ink; g.fillText(trk(WALL_TAG[r.layer]), tx, q.cy + .6);
+    }
+  }
   function rowSprite(r, w) {
-    const key = r._k || (r._k = `${r.layer}|${r.h.toFixed(1)}|${Math.round(w)}|` + r.blocks.map(b => b.x.toFixed(1) + ',' + b.w.toFixed(1)).join('|'));
+    const key = (r._k || (r._k = `${r.layer}|${r.h.toFixed(1)}|${Math.round(w)}|` + r.blocks.map(b => b.x.toFixed(1) + ',' + b.w.toFixed(1)).join('|')));
     let el = rowCache.get(key);
     if (el) { rowCache.delete(key); rowCache.set(key, el); return el; } // keep recently used rows
     el = rowPool.pop() || document.createElement('canvas');
@@ -618,6 +669,7 @@
       BS.rr(g, x, 0, tw, r.h, 2.5); g.fillStyle = lin(g, 0, r.h, 0, m[0], 1, m[1]); g.fill();
       g.strokeStyle = m[2]; g.lineWidth = 1; g.stroke();
     });
+    paintTags(g, r);
     rowCache.set(key, el);
     if (rowCache.size > 44) { const old = rowCache.keys().next().value; rowPool.push(rowCache.get(old)); rowCache.delete(old); }
     return el;
@@ -630,7 +682,7 @@
       if (w < SLIM_W) return;
       if (st === 'box') {
         c.fillStyle = Math.sin(t * 2.2 + i * 1.9) > -.6 ? '#7dffb0' : '#35604a'; c.fillRect(x + w - 10, y + r.h - 6, 2.8, 2.8);
-        if (Math.floor(t * 2 + i * .37) % 2) { c.fillStyle = 'rgba(170,255,198,.95)'; c.fillRect(x + w - 12, y + r.h - 14.5, 3, 4); }
+        if (Math.floor(t * 2 + i * .37) % 2 && !tagOver(r, x + w - 12, x + w - 9)) { c.fillStyle = 'rgba(170,255,198,.95)'; c.fillRect(x + w - 12, y + r.h - 14.5, 3, 4); }
         return;
       }
       for (let k = 0; k < 4; k++) {
@@ -641,7 +693,11 @@
       if (i % 2 === 0 && w > 30) {
         const av = r.h - 18, rr = Math.min(7, av / 2), cy = y + 14 + av / 2, a0 = t * 2.6 + i;
         c.strokeStyle = '#e4ebf7'; c.lineWidth = 1.1; c.beginPath();
-        for (let q = 0; q < 2; q++) for (let k = 0; k < 3; k++) { const cx = x + w * (q ? .72 : .28), a = a0 + k * 2.094; c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * rr * .42, cy + Math.sin(a) * rr * .42); }
+        for (let q = 0; q < 2; q++) {
+          const cx = x + w * (q ? .72 : .28);
+          if (tagOver(r, cx - rr, cx + rr)) continue; // this reel is behind the name plate
+          for (let k = 0; k < 3; k++) { const a = a0 + k * 2.094; c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * rr * .42, cy + Math.sin(a) * rr * .42); }
+        }
         c.stroke();
       }
     });
@@ -768,17 +824,54 @@
     c.restore();
   }
   const docY = (it, d, t) => it.y - d + Math.sin(t * 2.6 + it.ph) * 3.5;
-  let docSpr = null;
-  function docSprite() {
-    if (docSpr) return docSpr;
-    const S = mkCanvas(44, 44), g = S.g;
+  /* What you recover matches where you are: an app record, a contract, an email, a green-screen record, a
+     customer record, a paper file. All are the same white, glowing card so they stay obviously collectable. */
+  const docLayer = it => it.layer != null ? it.layer : (it.layer = layerIdx(yearAt(it.y)));
+  const docSprs = [];
+  function docSprite(layer = 1) {
+    if (docSprs[layer]) return docSprs[layer];
+    const S = mkCanvas(44, 44), g = S.g, INK = 'rgba(22,82,122,.88)';
     g.translate(22, 22);
-    const page = () => { g.beginPath(); g.moveTo(-6.5, -8.5); g.lineTo(2.5, -8.5); g.lineTo(6.5, -4.5); g.lineTo(6.5, 8.5); g.lineTo(-6.5, 8.5); g.closePath(); };
-    g.save(); g.shadowColor = 'rgba(150,232,255,1)'; g.shadowBlur = 7 * DPR; g.fillStyle = '#fff'; page(); g.fill(); g.restore();
-    page(); g.fillStyle = lin(g, -8.5, 8.5, 0, '#ffffff', 1, '#d2f1ff'); g.fill();
-    g.fillStyle = '#9fd6ef'; g.beginPath(); g.moveTo(2.5, -8.5); g.lineTo(2.5, -4.5); g.lineTo(6.5, -4.5); g.closePath(); g.fill();
-    g.fillStyle = 'rgba(22,82,122,.88)'; g.fillRect(-4, -2.4, 8, 1.3); g.fillRect(-4, .7, 8, 1.3); g.fillRect(-4, 3.8, 5.2, 1.3);
-    return docSpr = S.cv;
+    const page = (x = 0, y = 0) => { g.beginPath(); g.moveTo(x - 6.5, y - 8.5); g.lineTo(x + 2.5, y - 8.5); g.lineTo(x + 6.5, y - 4.5); g.lineTo(x + 6.5, y + 8.5); g.lineTo(x - 6.5, y + 8.5); g.closePath(); };
+    const card = (w, h, r) => BS.rr(g, -w / 2, -h / 2, w, h, r);
+    const body = shape => { // the glow first, then the white card itself
+      g.save(); g.shadowColor = 'rgba(150,232,255,1)'; g.shadowBlur = 7 * DPR; g.fillStyle = '#fff'; shape(); g.fill(); g.restore();
+      shape(); g.fillStyle = lin(g, -8.5, 8.5, 0, '#ffffff', 1, '#d2f1ff'); g.fill();
+    };
+    const fold = () => { g.fillStyle = '#9fd6ef'; g.beginPath(); g.moveTo(2.5, -8.5); g.lineTo(2.5, -4.5); g.lineTo(6.5, -4.5); g.closePath(); g.fill(); };
+    if (layer === 0) { // cloud apps: a record in an app window, with its title bar and dots
+      body(() => card(15, 15, 2.6));
+      g.save(); card(15, 15, 2.6); g.clip(); g.fillStyle = '#58b6e6'; g.fillRect(-7.5, -7.5, 15, 4.4); g.restore();
+      g.fillStyle = '#fff'; for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(-5 + k * 2.4, -5.3, .75, 0, 7); g.fill(); }
+      g.fillStyle = INK; g.fillRect(-4.6, -.8, 9.2, 1.3); g.fillRect(-4.6, 2.2, 9.2, 1.3); g.fillRect(-4.6, 5.1, 5.6, 1.2);
+    } else if (layer === 2) { // email archives: an envelope
+      body(() => card(17, 12.5, 1.8));
+      g.strokeStyle = INK; g.lineWidth = 1.3; g.lineJoin = 'round'; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-7.2, -5); g.lineTo(0, .8); g.lineTo(7.2, -5); g.stroke();
+      g.strokeStyle = 'rgba(22,82,122,.4)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-7.2, 5); g.lineTo(-2.4, 1); g.moveTo(7.2, 5); g.lineTo(2.4, 1); g.stroke();
+    } else if (layer === 3) { // legacy applications: a green-screen record
+      body(() => card(16, 14, 2.2));
+      BS.rr(g, -6.2, -5.2, 12.4, 10.4, 1.3); g.fillStyle = '#0e3323'; g.fill();
+      g.fillStyle = '#86f0aa'; g.fillRect(-4.4, -3.3, 6.6, 1.3); g.fillRect(-4.4, -.5, 8.4, 1.3); g.fillRect(-4.4, 2.3, 2.2, 1.3); g.fillRect(-1.4, 2.1, 1.7, 1.7);
+    } else if (layer === 4) { // systems of record: a row of a table
+      body(() => card(17, 14, 2));
+      g.save(); card(17, 14, 2); g.clip(); g.fillStyle = '#58b6e6'; g.fillRect(-8.5, -7, 17, 4.2); g.restore();
+      g.fillStyle = 'rgba(22,82,122,.55)'; g.fillRect(-8.5, .2, 17, .9); g.fillRect(-8.5, 3.9, 17, .9); g.fillRect(-2.9, -7, .9, 14);
+      g.fillStyle = INK; g.fillRect(-6.8, -1.9, 2.4, 1.1); g.fillRect(-.6, -1.9, 5.6, 1.1); g.fillRect(-6.8, 1.9, 2.4, 1.1); g.fillRect(-.6, 1.9, 4, 1.1);
+    } else if (layer === 5) { // offline archives: sheets of paper, one behind the other
+      g.save(); g.translate(1.8, -1.6); g.rotate(.16); g.shadowColor = 'rgba(150,232,255,1)'; g.shadowBlur = 7 * DPR; g.fillStyle = '#cfe9f5'; page(); g.fill(); g.restore();
+      g.save(); g.translate(-1, 1); g.rotate(-.06);
+      page(); g.fillStyle = lin(g, -8.5, 8.5, 0, '#ffffff', 1, '#d2f1ff'); g.fill(); fold();
+      g.strokeStyle = INK; g.lineWidth = 1.1; g.beginPath(); g.arc(-2.6, -3.8, 1.5, 0, 7); g.stroke(); // an archive stamp
+      g.fillStyle = INK; g.fillRect(-4, .7, 8, 1.3); g.fillRect(-4, 3.8, 5.2, 1.3);
+      g.restore();
+    } else { // shared drives (and the default): a file, here a signed contract
+      body(page); fold();
+      g.fillStyle = INK; g.fillRect(-4, -2.6, 8, 1.3); g.fillRect(-4, .3, 8, 1.3);
+      if (layer === 1) { g.strokeStyle = INK; g.lineWidth = 1.1; g.lineCap = 'round'; g.beginPath(); g.moveTo(-4, 5.6); g.quadraticCurveTo(-2.4, 2.6, -1, 5.2); g.quadraticCurveTo(.4, 7, 1.6, 4.4); g.lineTo(4, 5.4); g.stroke(); }
+      else g.fillRect(-4, 3.8, 5.2, 1.3);
+    }
+    return docSprs[layer] = S.cv;
   }
   // documents glow through the dark, with a slow pulse ring
   function drawDocGlows(c, its, d, h, t) {
@@ -794,17 +887,17 @@
     c.globalAlpha = 1;
   }
   function drawDocIcons(c, its, d, h, t) {
-    const img = docSprite();
     for (const it of its) {
       const y = docY(it, d, t);
       if (y < -30 || y > h + 30) continue;
+      const img = docSprite(docLayer(it));
       c.save(); c.translate(it.x, y); c.rotate(Math.sin(t * 1.4 + it.ph) * .12); c.drawImage(img, -22, -22, 44, 44); c.restore();
     }
   }
   // a collected page spirals into the lantern
   function drawFlies(c, fl, x, y) {
-    const img = docSprite();
     for (const f of fl) {
+      const img = docSprite(f.layer);
       const e = BS.ease(f.k), a = e * 5.2, r = 1 - e, ca = Math.cos(a), sa = Math.sin(a);
       const sc = 1 - .72 * e;
       c.save(); c.translate(x + (f.dx * ca - f.dy * sa) * r, y + (f.dx * sa + f.dy * ca) * r); c.rotate(a); c.scale(sc, sc);
@@ -1116,7 +1209,8 @@
     drawPops(c, s.pops);
     if (s.banner) drawBanner(c, w, s.banner, acc, tint);
     if (s.hud) {
-      if (s.hud.show) { c.fillStyle = lin(c, h - 76, h, 0, rgb(tint, 0), 1, rgb(tint, .6)); c.fillRect(0, h - 76, w, 76); }
+      // the foot of the screen fades out, so the shell's idea line and brand pill read over whatever is rising
+      if (s.hud.show) { c.fillStyle = lin(c, h - 116, h, 0, rgb(tint, 0), .5, rgb(tint, .72), 1, rgb(tint, .92)); c.fillRect(0, h - 116, w, 116); }
       drawHud(c, w, h, s.hud, t, acc, tint);
       if (s.rail && s.hud.show) drawRail(c, w, s.rail, yearP, s.sweep > 0);
     }
@@ -1149,8 +1243,8 @@
       hud: {
         show: running || over, top: SAFE_T, m: depthM(), live: running,
         layer: LAYERS[layerNow].name, light, flash: gotFx, score: totalScore(), docs: frags,
-        // sits above the shell's mode pill (bottom-centre, ~24px tall, 10px above the safe area)
-        hint: running && runTime < 5 ? Math.min(1, (5 - runTime) / 1.2) : 0, hintY: H - Math.max(10, SAFE_B) - 24 - 16,
+        // sits above the shell's strip (the game's idea in one line, then the brand pill; the line wraps on narrow phones)
+        hint: running && runTime < 5 ? Math.min(1, (5 - runTime) / 1.2) : 0, hintY: H - SAFE_B - (BS.SAFE_BOTTOM || 64) - (W < 350 ? 28 : 12),
       },
     });
   }
@@ -1204,7 +1298,7 @@
   const TUTORIAL = [
     {
       title: 'Slide to steer',
-      text: 'Drag anywhere to steer your AI left and right. It sinks on its own.',
+      text: 'Drag anywhere to steer your agent left and right. It sinks on its own.',
       demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
         const v = 165, py = vh * .4, amp = vw * .17;
         const hand = tt => vw / 2 + Math.sin(tt * Math.PI / 2) * amp;               // 4 s loop
@@ -1219,7 +1313,7 @@
     },
     {
       title: 'Find the gaps',
-      text: 'Walls are legacy systems blocking the way. Steer through the gaps.',
+      text: 'Walls are content your agent can\u2019t get into: siloed apps, locked folders, sealed mailboxes. Steer through the gaps.',
       demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
         const L = 3.2, v = 130, py = vh * .4, gw = vw * .42;
         const gapAt = k => (mod(k, 2) ? .3 : .7) * vw;
@@ -1235,7 +1329,7 @@
     },
     {
       title: 'Collect documents',
-      text: 'Glowing documents top up your context. Each one is content your AI can now use.',
+      text: 'Glowing documents top up your context. Each one is content your agent can now use.',
       demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
         const L = 4, v = 140, py = vh * .52, k = Math.floor(t / L), u = t - k * L;
         const docs = [[.9, .3], [1.9, .68], [2.9, .44]];
@@ -1246,8 +1340,8 @@
         const its = [], ps = [], pp = [], fl = [];
         docs.forEach(([tc, fxr], i) => {
           const x = fxr * vw, age = u - tc;
-          if (age < -.18) { its.push({ x, y: v * (k * L + tc) + py, ph: i * 2 }); return; }
-          if (age < .18) fl.push({ dx: x - fx(t), dy: v * .18, k: (age + .18) / .36 }); // picked up just before it reaches the lantern
+          if (age < -.18) { its.push({ x, y: v * (k * L + tc) + py, ph: i * 2, layer: 2 }); return; }
+          if (age < .18) fl.push({ dx: x - fx(t), dy: v * .18, k: (age + .18) / .36, layer: 2 }); // picked up just before it reaches the lantern
           if (age < 0) return;
           l += 15 * smooth(age / .3);
           got = Math.max(got, 1 - age / .6);
@@ -1266,7 +1360,7 @@
     },
     {
       title: 'Watch your context',
-      text: 'Context is your AI\u2019s oxygen. It runs down over time and drops when you hit a wall. When it runs out, your AI stalls.',
+      text: 'Context is your agent\u2019s oxygen. It runs down over time and drops when you hit a wall. When it runs out, your agent stalls.',
       demo: (c, w, h, t) => demo(c, w, h, t, (vw, vh) => {
         const L = 5.6, v = 120, py = vh * .52, TH = 1.6, OUT = 4, k = Math.floor(t / L), u = t - k * L;
         const keys = [[0, .45], [.5, .45], [1.9, .66], [4.4, .66], [5.6, .45]].map(([a, b]) => [a, b * vw]);
@@ -1287,7 +1381,7 @@
           hit: hitOn && age < .6 ? { x: hitX, y: py, k: age / .6 } : null,
           parts: hitOn && age < 1 ? demoBurst(hitX, py, age, 14, C_HIT, 200, 7) : [],
           pops: hitOn && age < 1 ? [{ x: hitX, y: py - 46 - 24 * age, text: '−context', size: 15, color: '#ffab98', life: 1 - age }] : [],
-          banner: dark > 0 ? { m, sub: 'Your AI went dark here', a: dark, y: vh * .72 } : null,
+          banner: dark > 0 ? { m, sub: OUT_LINE, a: dark, y: vh * .72 } : null,
           hud: { show: true, m, live: u < OUT, layer: LAYERS[4].name, light: l },
         };
       }),
@@ -1325,7 +1419,8 @@
   let last = performance.now();
   function frame(t) {
     const dt = Math.min(.05, (t - last) / 1000); last = t;
-    update(dt); draw();
+    if (!BS.paused) update(dt); // frozen behind the pause card
+    draw();
     requestAnimationFrame(frame);
   }
 
@@ -1340,8 +1435,9 @@
   nextY = H * .95; lastGapC = W / 2; genUntil(H * 1.6); // scenery behind the start card
   BS.init({
     id: 'deep-dive',
-    tagline: 'Context is your AI\u2019s oxygen. How deep can it go before it runs out?',
+    tagline: 'Context is your agent\u2019s oxygen. How deep can it go before it runs out?',
     tutorial: TUTORIAL,
+    score: () => totalScore(), // shown on the pause card
     onStart: () => start(),
   });
   requestAnimationFrame(frame);

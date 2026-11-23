@@ -27,7 +27,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=21">
+<link rel="stylesheet" href="shared/common.css?v=22">
 <style>
   :root {
     --bg: #150a14; --fg: #ffeef2; --accent: #ff9db2; --on-accent: #2a0a16;
@@ -40,8 +40,8 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/config.js?v=21"></script>
-<script src="shared/common.js?v=21"></script>
+<script src="shared/config.js?v=22"></script>
+<script src="shared/common.js?v=22"></script>
 <script>
 /* Vital Signs: "context is the oxygen of AI", made playable.
    The figure is an AI. Its brain is the models, its nervous system is orchestration, its muscles are the agents.
@@ -78,15 +78,22 @@
 
   // ---------- layout ----------
   // The figure is drawn in units of S around its chest. Targets are where oxygen can be dropped.
+  // The shell's strip (the game's idea, the hosts, the attempt) owns the bottom of the screen.
+  function safeBottom() {
+    const el = document.querySelector('.bs-strip'), b = el && el.getBoundingClientRect();
+    return Math.max(BS.SAFE_BOTTOM || 64, b && b.height ? window.innerHeight - b.top + 6 : 0);
+  }
+  const LEG = 26; // room under the tray for its legend
   function layout(w, h, demo) {
     const r = demo ? clamp(Math.min(w, h) * .085, 14, 26) : clamp(Math.min(w, h) * .075, 25, 34);
-    let F, slots = [];
+    let F, slots = [], legY = 0;
     if (demo) {
       const S = Math.min((h - 16) / 1.25, w * .42); // cropped at the waist so the parts stay large
       F = { cx: w * .38, cy: 10 + .8 * S, S };
       slots = [{ x: w * .84, y: h * .72 }, { x: w * .86, y: h * .34 }];
     } else {
-      const row2 = h - 58 - r, row1 = row2 - r * 2.1, top = 122, bot = row1 - r - 16;
+      const row2 = h - safeBottom() - LEG - r, row1 = row2 - r * 2.1, top = 122, bot = row1 - r - 16;
+      legY = row2 + r + 15;
       const S = Math.min((bot - top) / 1.7, (w - 36) / 1.42, 330);
       F = { cx: w / 2, cy: top + (bot - top - 1.7 * S) / 2 + .82 * S, S };
       const gap = Math.min(r * 3.3, (Math.min(w, 560) - 2 * r - 24) / 2.5);
@@ -95,7 +102,7 @@
     }
     const S = F.S, at = (x, y, rr, k) => ({ k, x: F.cx + x * S, y: F.cy + y * S, r: rr * S });
     const tg = [at(0, -.62, .17, 'brain'), at(0, .12, .125, 'nerve'), at(-.46, -.09, .115, 'muscle'), at(.46, -.09, .115, 'muscle')];
-    return { w, h, r, F, slots, tg, wide: !demo && w >= 1000 };
+    return { w, h, r, F, slots, tg, legY, demo: !!demo, wide: !demo && w >= 1000 };
   }
   function resize() {
     ({ ctx, w: W, h: H } = BS.fit(cv));
@@ -204,18 +211,58 @@
     if (off) { c.font = `700 ${clamp(r * .3, 8, 11)}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#ffb0b0'; c.fillText(trk('Stalled'), x, y); }
     c.restore();
   }
+  // Every part of the body is named, so a still frame reads like the slide: the three you feed, plus the
+  // skeleton and the vital organs (static, with a leader line to what they name).
   function drawLabels(c, lay, small) {
-    const [b, n, , mr] = lay.tg, f1 = small ? 8 : 9.5, f2 = small ? 9 : 11.5;
-    c.save(); c.textBaseline = 'alphabetic';
-    const put = (name, role, x, y, align) => {
-      c.textAlign = align; c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = 'rgba(20,8,18,.85)';
-      c.font = `700 ${f1}px ${FONT}`; c.strokeText(trk(name), x, y); c.fillStyle = 'rgba(255,238,242,.95)'; c.fillText(trk(name), x, y);
+    const [b, n, ml, mr] = lay.tg, F = lay.F, S = F.S, f1 = small ? 8 : lay.wide ? 11 : 9.5, f2 = small ? 9 : lay.wide ? 13.5 : 11.5;
+    c.save(); c.textBaseline = 'alphabetic'; c.lineJoin = 'round'; c.lineCap = 'round';
+    const put = (name, role, x, y, align, dim) => {
+      c.textAlign = align; c.lineWidth = 4; c.strokeStyle = 'rgba(20,8,18,.85)';
+      c.font = `700 ${f1}px ${FONT}`; c.strokeText(trk(name), x, y); c.fillStyle = `rgba(255,238,242,${dim ? .84 : .95})`; c.fillText(trk(name), x, y);
       if (small) return;
-      c.font = `500 ${f2}px ${FONT}`; c.strokeText(role, x, y + f2 + 3); c.fillStyle = 'rgba(255,238,242,.7)'; c.fillText(role, x, y + f2 + 3);
+      c.font = `500 ${f2}px ${FONT}`; c.strokeText(role, x, y + f2 + 3); c.fillStyle = `rgba(255,238,242,${dim ? .64 : .7})`; c.fillText(role, x, y + f2 + 3);
     };
-    put(PARTS.brain.name, PARTS.brain.role, b.x + b.r + 12, b.y - (small ? -3 : 4), 'left');
+    const lead = (x0, y0, x1, y1, ring) => { // from the label to the thing, stopping at a small ring around it
+      const d = Math.hypot(x1 - x0, y1 - y0) || 1, k = Math.max(0, d - ring) / d;
+      c.strokeStyle = 'rgba(255,238,242,.42)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k); c.stroke();
+      c.beginPath(); c.arc(x1, y1, ring, 0, 7); c.stroke();
+    };
+    const by = b.y - (small ? -3 : 4), low = small ? 3 : f2 + 9;
+    put(PARTS.brain.name, PARTS.brain.role, b.x + b.r + 12, by, 'left');
     put(PARTS.nerve.name, PARTS.nerve.role, n.x, n.y + n.r + 17, 'center');
+    put(PARTS.muscle.name, PARTS.muscle.role, ml.x, ml.y + ml.r + 17, 'center');
     put(PARTS.muscle.name, PARTS.muscle.role, mr.x, mr.y + mr.r + 17, 'center');
+    // vital organs: beside the head, pointing at the heart
+    const vx = b.x - b.r - 12;
+    lead(vx - S * .16, by + low, F.cx - S * .1, F.cy - S * .14, S * .058);
+    put('Vital organs', 'Systems of record', vx, by, 'right', true);
+    // skeleton: beside the hip, pointing at the pelvis (out of frame in the cropped tutorial pictures)
+    if (!lay.demo) {
+      const sx = F.cx + S * .37, sy = F.cy + S * .6;
+      lead(sx - 6, sy - 3.5, F.cx + S * .215, sy - 3.5, 2.2);
+      put('Skeleton', 'Infrastructure', sx, sy, 'left', true);
+    }
+    c.restore();
+  }
+  // Under the tray: what the two kinds of bubble are.
+  function drawTrayLegend(c, lay) {
+    const items = [[1, 'Trusted context'], [0, 'Ungoverned \u00b7 tap to govern']], d = 5, gi = 6, gap = 16;
+    c.save(); c.font = `600 ${lay.wide ? 12.5 : 10.5}px ${FONT}`; c.textBaseline = 'middle'; c.textAlign = 'left';
+    const ws = items.map(([, t]) => c.measureText(t).width), total = ws.reduce((a, v) => a + v + d * 2 + gi, 0) + gap * (items.length - 1);
+    let x = lay.w / 2 - total / 2; const y = lay.legY;
+    items.forEach(([k, t], i) => {
+      if (k) {
+        const g = c.createRadialGradient(x + d - 1.5, y - 1.5, .5, x + d, y, d); g.addColorStop(0, '#f4fdff'); g.addColorStop(.5, '#8fe0ff'); g.addColorStop(1, '#2f9bd8');
+        c.shadowColor = 'rgba(120,220,255,.7)'; c.shadowBlur = 6; c.fillStyle = g; c.beginPath(); c.arc(x + d, y, d, 0, 7); c.fill(); c.shadowBlur = 0;
+      } else {
+        c.fillStyle = '#7b6f7c'; c.beginPath(); c.arc(x + d, y, d, 0, 7); c.fill();
+        c.strokeStyle = 'rgba(255,230,236,.75)'; c.lineWidth = 1.2; c.setLineDash([2, 2]); c.beginPath(); c.arc(x + d, y, d - .6, 0, 7); c.stroke(); c.setLineDash([]);
+      }
+      c.lineJoin = 'round'; c.lineWidth = 3; c.strokeStyle = 'rgba(14,5,14,.8)'; c.strokeText(t, x + d * 2 + gi, y + .5);
+      c.fillStyle = k ? 'rgba(206,242,255,.92)' : 'rgba(255,238,242,.78)'; c.fillText(t, x + d * 2 + gi, y + .5);
+      x += d * 2 + gi + ws[i] + gap;
+    });
     c.restore();
   }
 
@@ -341,6 +388,7 @@
     const s0 = L.slots[0];
     c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.font = `700 9px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.34)';
     if ((running && taught >= 2) || over) c.fillText(trk('Incoming content'), W / 2, s0.y - L.r - 8);
+    drawTrayLegend(c, L);
     for (const b of bubbles) {
       if (b === (grab && grab.b)) continue;
       const k = b.kind ? clamp((clock - b.gov) / .25, 0, 1) : 0;
@@ -357,7 +405,7 @@
       c.font = `700 14.5px ${FONT}`; c.fillStyle = INK;
       c.fillText(taught === 0 ? 'Drag a blue bubble onto a part' : 'Tap a grey bubble to govern it', W / 2, hintY - 18);
       c.font = `500 12px ${FONT}`; c.fillStyle = 'rgba(255,238,242,.75)';
-      c.fillText(taught === 0 ? 'Feed whichever ring is running low' : 'Raw content becomes oxygen', W / 2, hintY);
+      c.fillText(taught === 0 ? 'Feed whichever ring is running low' : 'Ungoverned content becomes trusted context', W / 2, hintY);
       c.globalAlpha = 1;
     }
   }
@@ -383,7 +431,7 @@
     b.kind = 1; b.gov = clock; governed++; score += 5;
     if (taught === 1) taught = 2;
     BS.sfx('link', { n: governed % 8 }); BS.vibrate(8);
-    pop(b.x, b.y - L.r - 12, 'Governed', 14, O2, .9);
+    pop(b.x, b.y - L.r - 12, 'Trusted', 14, O2, .9);
   }
   function feed(b, g) {
     const p = parts[g.k];
@@ -415,6 +463,7 @@
     bubbles = []; pops = []; grab = null;
     time = 0; score = 0; shown = 0; lives = LIVES; fed = 0; governed = 0; stalls = 0; chokes = 0; flowT = 0; tick = 0; oxySum = 0; oxyN = 0;
     spawnCd = .9; surgeCd = 7; warnSec = 0; shake = 0; lifeAt = -9; over = false; running = true; taught = 0;
+    L = layout(W, H); // the strip is on screen now: measure it
     placeHint();
     spawnBubble(1); spawnBubble(1); spawnBubble(0);
   }
@@ -542,7 +591,8 @@
   let last = performance.now();
   function frame(t) {
     const dt = Math.min(.05, (t - last) / 1000); last = t;
-    update(dt); draw();
+    if (!BS.paused) update(dt); // frozen behind the pause card
+    draw();
     requestAnimationFrame(frame);
   }
 
@@ -589,7 +639,7 @@
     if (t < t0) {
       drawBubble(c, s.x, s.y, lay.r, kind, T, { ring: t >= tap ? clamp(1 - (t - tap) / .45, 0, 1) : 0 });
       if (t > .3 && t < tap + .4) BS.drawHand(c, s.x + lay.r * .2, s.y + lay.r * .5, t >= tap - .14 && t < tap + .12, '#ffeef2');
-      demoPop(c, s.x, s.y - lay.r - 12, t - tap, 'Governed', 13, O2, 1);
+      demoPop(c, s.x, s.y - lay.r - 12, t - tap, 'Trusted', 13, O2, 1);
     } else dragAt(c, lay, 1, s, lay.tg[1], t, t0, t1, T);
   }
   function demoChoke(c, w, h, T) {
@@ -610,7 +660,7 @@
   const TUTORIAL = [
     { title: 'Your AI needs oxygen', text: 'The brain is your models, the nervous system is orchestration, the muscles are your agents. Each ring runs down as that part works.', demo: demoNeeds },
     { title: 'Drag context to a part', text: 'Blue bubbles are trusted context and connected data: the oxygen. Drag one onto whichever part is running low.', demo: demoFeed },
-    { title: 'Govern raw content first', text: 'Grey bubbles are raw, unstructured content. Tap one to govern it and it becomes oxygen.', demo: demoGovern },
+    { title: 'Govern raw content first', text: 'Grey bubbles are raw, ungoverned content. Tap one to govern it and it becomes trusted context: oxygen.', demo: demoGovern },
     { title: 'Never feed raw content', text: 'Give a part ungoverned content and it chokes: it loses oxygen instead of gaining it.', demo: demoChoke },
     { title: 'Don’t let anything stall', text: `A part with an empty ring stalls. Three stalls or ${DURATION} seconds end the round. Keep all three breathing to build your multiplier.`, demo: demoStall },
   ];
@@ -629,6 +679,7 @@
     id: 'vital-signs',
     tagline: 'Context is the oxygen of AI. Keep it breathing.',
     onStart: start,
+    score: () => score,
     tutorial: TUTORIAL,
   });
   requestAnimationFrame(frame);

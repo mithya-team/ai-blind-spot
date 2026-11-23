@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Clear Cut</title>
-<meta name="description" content="Shatter the barriers between your AI and your content. Never cut governance.">
+<meta name="description" content="Shatter the barriers between your agent and your content. Never cut governance.">
 <link rel="icon" href="icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -14,7 +14,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="The AI Blind Spot">
 <meta property="og:title" content="Clear Cut · The AI Blind Spot">
-<meta property="og:description" content="Shatter the barriers between your AI and your content. Never cut governance.">
+<meta property="og:description" content="Shatter the barriers between your agent and your content. Never cut governance.">
 <meta property="og:url" content="https://mithya-team.github.io/ai-blind-spot/clear-cut.html">
 <meta property="og:image" content="https://mithya-team.github.io/ai-blind-spot/og/clear-cut.png">
 <meta property="og:image:width" content="1200">
@@ -22,12 +22,12 @@
 <meta property="og:image:alt" content="Clear Cut, co-branded by OpenText, AWS and Capgemini">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Clear Cut · The AI Blind Spot">
-<meta name="twitter:description" content="Shatter the barriers between your AI and your content. Never cut governance.">
+<meta name="twitter:description" content="Shatter the barriers between your agent and your content. Never cut governance.">
 <meta name="twitter:image" content="https://mithya-team.github.io/ai-blind-spot/og/clear-cut.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/common.css?v=21">
+<link rel="stylesheet" href="shared/common.css?v=22">
 <style>
   :root {
     --bg: #eef2f9; --fg: #1d2540; --accent: #2b3a8f; --on-accent: #ffffff;
@@ -41,8 +41,8 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="shared/config.js?v=21"></script>
-<script src="shared/common.js?v=21"></script>
+<script src="shared/config.js?v=22"></script>
+<script src="shared/common.js?v=22"></script>
 <script>
 (() => {
   const cv = document.getElementById('c');
@@ -54,6 +54,16 @@
   const PRISM = ['#ff5fa2', '#ffb02e', '#1fc8ac', '#4f8dfa', '#9166f5'];
   const SPARK = ['255,110,170', '255,186,72', '40,204,178', '98,150,255', '160,124,250'];
   const BARRIERS = [{ k: 'silo', t: 'SILO' }, { k: 'legacy', t: 'LEGACY' }, { k: 'hidden', t: 'HIDDEN' }, { k: 'scatter', t: 'SCATTERED' }];
+  // Each gold seal asks one of the four things trusted context answers (OpenText's definition: where data came
+  // from, who owns it, whether it's current and cleared for use). q sits under the seal; ok is the pop when it is
+  // approved; lost is what the agent is left with when the seal is cut.
+  const CHECKS = [
+    { q: 'SOURCE?', ok: 'Source verified', lost: 'Unknown source' },
+    { q: 'OWNER?', ok: 'Owner confirmed', lost: 'Unknown owner' },
+    { q: 'CURRENT?', ok: 'Up to date', lost: 'Out of date' },
+    { q: 'CLEARED?', ok: 'Cleared for use', lost: 'Not cleared' },
+  ];
+  const CHECK_INK = '#8a5d0c';
   // Each barrier is its own tint of glass.
   const TINT = {
     silo: { rgb: '98,146,250', lite: '216,229,255', deep: '44,74,160', ink: '#2c4a9c' },
@@ -101,7 +111,7 @@
   let running = false, over = false, time = 0, clock = 0, score = 0, lives = LIVES;
   let cleared = 0, approved = 0, breaches = 0, seen = 0, spawnCd = .4, flash = 0, trayPulse = 0, sealHints = 0, bestCombo = 0, warnSec = 0;
   let shake = 0, lifeFx = null, shownScore = 0, scoreT = -9, overAt = 0;
-  let ptr = null;
+  let ptr = null, checkBag = [], trayW = 136, trayX = 0;
 
   function resize() {
     ({ ctx, w: W, h: H } = BS.fit(cv));
@@ -110,12 +120,16 @@
     PRISM.forEach((c, i) => timerGrad.addColorStop(i / 4, c));
     fadeGrad = ctx.createLinearGradient(0, 0, 0, 104);
     fadeGrad.addColorStop(0, 'rgba(241,244,253,.8)'); fadeGrad.addColorStop(1, 'rgba(241,244,253,0)');
+    // The tray is wide enough for "Your agent can see" on most phones; it sits a touch right of centre then, because
+    // the score chip beside it grows with the score and the lives chip does not.
+    trayW = clamp(W - 220, 112, 170); trayX = W / 2 + (trayW > 150 ? 4 : 0);
     placeHint();
   }
-  // The shell's mode pill sits at bottom-centre; keep the opening hint above it.
+  // The shell's strip (caption, then hosts · game · attempt) takes the bottom of the screen; the caption wraps to a
+  // second line on narrow phones. Keep the opening hint clear above it.
   function placeHint() {
     const r = BS.pill && BS.pill.getBoundingClientRect();
-    hintY = Math.min(H - 60, r && r.height > 16 ? r.top - 14 : H);
+    hintY = Math.min(H - (BS.SAFE_BOTTOM || 64) - 6, r && r.height > 16 ? r.top - 10 : H);
   }
 
   // ---------- spawning: panes and seals rise like bubbles ----------
@@ -132,7 +146,11 @@
       vy: -(rand(112, 150) + 95 * p), swayA: rand(6, 20), swayF: rand(.5, 1.1), ph: rand(0, 6),
       rot: rand(-.12, .12), vr: rand(-.12, .12), age: 0, state: 'live', t: 0,
     };
-    if (seal) { if (sealHints < 2) { it.hint = true; sealHints++; } }
+    if (seal) {
+      if (!checkBag.length) checkBag = [0, 1, 2, 3].sort(() => Math.random() - .5); // all four come round before any repeats
+      it.chk = checkBag.pop();
+      if (sealHints < 2) { it.hint = true; sealHints++; }
+    }
     else { it.b = pick(BARRIERS); it.doc = pick(DOCS); }
     items.push(it);
   }
@@ -261,6 +279,7 @@
     fx.push({ type: 'breach', x: it.x, y: it.y, t: 0, dur: .5 });
     for (let i = 0; i < 10; i++) { const a = rand(0, TAU), v = rand(90, 260); addPart({ x: it.x, y: it.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5, max: .5, size: rand(1.6, 3), color: i % 2 ? '#e5484d' : '#ff9a8f' }); }
     pop(it.x, it.y - SR - 14, 'Governance breached', 17, '#d63c4a', 1.4);
+    if (CHECKS[it.chk]) pop(it.x, it.y - SR + 7, CHECKS[it.chk].lost, 12.5, '#b3303d', 1.4);
     BS.sfx('breach');
     BS.vibrate([30, 40, 60]);
     if (lives <= 0) end();
@@ -274,7 +293,7 @@
     }
     if (!best) return;
     best.state = 'approved'; best.t = 0; approved++; score += 25;
-    pop(best.x, best.y - SR * 1.75 - 14, 'Approved +25', 16, '#0e8a68');
+    pop(best.x, best.y - SR * 1.75 - 14, `${CHECKS[best.chk] ? CHECKS[best.chk].ok : 'Approved'} +25`, 16, '#0e8a68');
     fx.push({ type: 'approve', x: best.x, y: best.y, t: 0, dur: .7 });
     for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; addPart({ x: best.x, y: best.y, vx: Math.cos(a) * 180, vy: Math.sin(a) * 180, life: .5, max: .5, size: 2.4, color: i % 2 ? '#e0b04a' : '#2fbf96' }); }
     BS.sfx('approve');
@@ -295,7 +314,7 @@
   function start() {
     items = []; shards = []; reveals = []; pops = []; parts = []; trail = []; fx = [];
     time = 0; score = 0; lives = LIVES; cleared = 0; approved = 0; breaches = 0; seen = 0; bestCombo = 0; warnSec = 0;
-    spawnCd = .3; sealHints = 0; flash = 0; ptr = null; over = false; running = true;
+    spawnCd = .3; sealHints = 0; checkBag = []; flash = 0; ptr = null; over = false; running = true;
     shake = 0; lifeFx = null; shownScore = 0; scoreT = -9;
     placeHint();
     prewarm();
@@ -306,7 +325,7 @@
     const what = cleared ? `${BS.pl(cleared, 'barrier')} cleared` : 'No barriers cleared';
     if (lives <= 0) return `${what}, and three governance breaches ended the round. Ungoverned AI costs more than it saves.`;
     if (breaches) return `${what}, ${cleared ? 'but' : 'and'} governance was breached ${times(breaches)}.`;
-    if (!cleared) return 'No barriers cleared, so your AI is still looking at frosted glass.';
+    if (!cleared) return 'No barriers cleared, so your agent is still looking at frosted glass.';
     if (approved) return `${what}, ${BS.pl(approved, 'seal')} approved and governance intact.`;
     return `${what} and governance intact.`;
   }
@@ -749,7 +768,11 @@
         c.fillRect(-sr * .42, -sr * 1.5, sr * .84, sr * 3);
       }
       c.restore();
-      if (it.hint) put(c, labelSprite('TAP · DON’T CUT', `700 10px ${FONT}`, '#8a5d0c', 22), it.x, it.y + sr + 19);
+      // the check this seal stands for, then (first two seals only) how to handle it
+      // (the labels grow a little with the seal, so they still read on a big screen)
+      const ck = CHECKS[it.chk], fs = Math.round(clamp(sr * .28, 10, 13) * 2) / 2, lh = Math.round(fs * 2.2), font = `700 ${fs}px ${FONT}`;
+      if (ck) put(c, labelSprite(ck.q, font, CHECK_INK, lh), it.x, it.y + sr + 8 + lh / 2);
+      if (it.hint) put(c, labelSprite('TAP · DON’T CUT', font, CHECK_INK, lh), it.x, it.y + sr + 8 + lh / 2 + (ck ? lh + 3 : 0));
     } else if (it.state === 'approved') {
       const k = it.t / .5;
       c.save(); c.globalAlpha *= 1 - k; put(c, sealSprite(sr, false), it.x, it.y, 1 + k * .3); c.restore();
@@ -1026,22 +1049,25 @@
     c.globalAlpha = ga;
   }
 
-  // Tray: what the AI can now see. It bumps and its count ticks up as each document lands.
+  // Tray: what your agent can now see. It bumps and its count ticks up as each document lands.
+  // The label shortens when the tray is narrow (small phones, the tutorial's canvas).
+  const TRAY_LABELS = ['Your agent can see', 'Agent can see', 'Agent sees'];
   function traySprite(tw) {
     const pill = pillSprite(tw, 34);
     return sprite('tray:' + tw, pill.w, pill.h, c => {
       c.drawImage(pill.el, 0, 0, pill.w, pill.h);
       c.translate(pill.w / 2, pill.h / 2);
-      c.font = `700 12.5px ${FONT}`;
-      const lw = c.measureText('AI can see').width, total = 15 + lw + 6 + 16, x0 = -total / 2;
+      c.font = `700 12px ${FONT}`;
+      const label = TRAY_LABELS.find(l => 15 + c.measureText(l).width + 6 + 18 <= tw - 16) || TRAY_LABELS[2];
+      const lw = c.measureText(label).width, total = 15 + lw + 6 + 16, x0 = -total / 2;
       c.fillStyle = 'rgba(22,163,127,.18)'; c.beginPath(); c.arc(x0 + 4, 0, 7, 0, TAU); c.fill();
       c.fillStyle = '#16a37f'; c.beginPath(); c.arc(x0 + 4, 0, 3.8, 0, TAU); c.fill();
       c.fillStyle = 'rgba(29,37,64,.74)'; c.textAlign = 'left'; c.textBaseline = 'middle';
-      c.fillText('AI can see', x0 + 15, 1);
+      c.fillText(label, x0 + 15, 1);
       return { dot: x0 + 4, nx: x0 + 15 + lw + 6 };
     });
   }
-  function drawTray(c, x, y, n, pulse, tw = 136) {
+  function drawTray(c, x, y, n, pulse, tw = 140) {
     const s = traySprite(tw), d = s.data, ga = c.globalAlpha, e = 1 - pulse;
     c.save(); c.translate(x, y); c.scale(1 + pulse * .1, 1 + pulse * .1);
     put(c, s);
@@ -1089,11 +1115,11 @@
     // score, on its own glass chip; it gives a small bump when it changes
     if (score !== shownScore) { shownScore = score; scoreT = clock; }
     const bump = RM ? 0 : Math.max(0, 1 - (clock - scoreT) / .28);
-    const tw = clamp(W - 216, 112, 136), txt = BS.fmt(score);
+    const tw = trayW, txt = BS.fmt(score);
     let fs = 23;
     ctx.font = `700 ${fs}px ${FONT}`;
     let nw = ctx.measureText(txt).width;
-    const room = W / 2 - tw / 2 - 16 - 28;
+    const room = trayX - tw / 2 - 16 - 28;
     if (nw > room) { fs = Math.max(15, fs * room / nw); ctx.font = `700 ${fs}px ${FONT}`; nw = ctx.measureText(txt).width; }
     const cw = Math.max(72, Math.ceil((nw + 28) / 6) * 6);
     put(ctx, pillSprite(cw, 46, 15), 10 + cw / 2, HUD_Y);
@@ -1103,7 +1129,7 @@
     ctx.fillStyle = INK; ctx.font = `700 ${fs}px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText(txt, 0, 0);
     ctx.restore();
     drawLives(ctx, W - 10, HUD_Y, lives, lifeFx ? lifeFx.i : -1, lifeFx ? lifeFx.t : 0);
-    drawTray(ctx, W / 2, HUD_Y, seen, trayPulse, tw);
+    drawTray(ctx, trayX, HUD_Y, seen, trayPulse, tw);
     ctx.globalAlpha = 1;
     if (running && time < 5) {
       ctx.save(); ctx.globalAlpha = Math.min(1, (5 - time) / 1.2);
@@ -1118,7 +1144,7 @@
     if (shake > 0 && !RM) { const m = shake * shake * 8; ctx.translate(Math.sin(clock * 73) * m, Math.cos(clock * 57) * m); }
     for (const it of items) it.kind === 'pane' ? (it.state === 'live' && drawPane(ctx, it, PW)) : drawSeal(ctx, it, SR);
     if (running || over) { ctx.fillStyle = fadeGrad; ctx.fillRect(-12, -12, W + 24, 116); }
-    for (const r of reveals) drawReveal(ctx, r, PW, W / 2, HUD_Y);
+    for (const r of reveals) drawReveal(ctx, r, PW, trayX, HUD_Y);
     for (const s of shards) drawShard(ctx, s);
     for (const f of fx) drawFx(ctx, f);
     drawParts(ctx, parts);
@@ -1139,7 +1165,8 @@
   let last = performance.now();
   function frame(t) {
     const dt = Math.min(.05, (t - last) / 1000); last = t;
-    update(dt); draw();
+    if (!BS.paused) update(dt); // frozen behind the pause card
+    draw();
     requestAnimationFrame(frame);
   }
 
@@ -1194,7 +1221,7 @@
   const TRAY_Y = 25;
 
   function demoCut(c, w, h, T) {
-    const t = T % 4.2, pw = demoPane(w), ph = pw * 1.28, HOLD = 1.1;
+    const t = T % 3.8, pw = demoPane(w), ph = pw * 1.28, HOLD = 1.1; // loops soon after the document lands, so the frame is never empty for long
     drawBg(c, w, h, T);
     const base = { x: w / 2, y: h / 2 + 22, rot: -.05, b: BARRIERS[0], doc: DOCS[0], age: T };
     const sw = { ax: base.x - pw / 2 - 46, ay: base.y - ph * .32, bx: base.x + pw / 2 + 46, by: base.y + ph * .2, t0: .8, t1: 1.35 };
@@ -1233,12 +1260,12 @@
   function demoTap(c, w, h, T) {
     const t = T % 3.6, sr = demoPane(w) * .37, tapT = 1.3;
     drawBg(c, w, h, T);
-    const seal = { x: w / 2, y: h / 2 - 4, age: T, t: 0, state: 'live', hint: true }, a = t - tapT;
+    const seal = { x: w / 2, y: h / 2 - 14, age: T, t: 0, state: 'live', hint: true, chk: 0 }, a = t - tapT;
     if (a < 0) fadeIn(c, t / .3, () => drawSeal(c, seal, sr));
     else if (a < .5) drawSeal(c, { ...seal, state: 'approved', t: a }, sr);
     drawApprove(c, seal.x, seal.y, a, sr);
     burstAt(c, seal.x, seal.y, a);
-    popAt(c, w, seal.x, seal.y - sr * 1.75 - 14, a, 'Approved +25', 16, '#0e8a68');
+    popAt(c, w, seal.x, seal.y - sr * 1.75 - 14, a, `${CHECKS[0].ok} +25`, 16, '#0e8a68');
     // fingertip: glide in, press, release (the tap lands on release), lift away
     const home = { x: w / 2 + 92, y: h - 26 }, kin = BS.ease((t - .3) / .7), kout = BS.ease((t - tapT - .2) / .6);
     const p = t < tapT + .2 ? { x: lerp(home.x, seal.x, kin), y: lerp(home.y, seal.y, kin) } : { x: lerp(seal.x, home.x, kout), y: lerp(seal.y, home.y, kout) };
@@ -1248,7 +1275,7 @@
   function demoBreach(c, w, h, T) {
     const t = T % 3.8, sr = demoPane(w) * .37;
     drawBg(c, w, h, T);
-    const seal = { x: w / 2, y: h / 2 + 14, age: T, t: 0, state: 'live' };
+    const seal = { x: w / 2, y: h / 2 + 14, age: T, t: 0, state: 'live', chk: 3 };
     const sw = { ax: seal.x - 112, ay: seal.y - 50, bx: seal.x + 112, by: seal.y + 34, t0: .75, t1: 1.3 };
     const tc = swipeTime(sw, seal.x - sr * .7), a = t - tc;
     if (a < 0) fadeIn(c, t / .3, () => drawSeal(c, seal, sr));
@@ -1258,6 +1285,7 @@
     // lives, laid out as in the game's HUD; the left-most one breaks
     drawLives(c, w - 10, TRAY_Y, a >= 0 ? LIVES - 1 : LIVES, a >= 0 ? LIVES - 1 : -1, Math.max(0, a));
     popAt(c, w, seal.x, seal.y - sr - 14, a, 'Governance breached', 17, '#d63c4a', 1.4);
+    popAt(c, w, seal.x, seal.y - sr + 7, a, CHECKS[3].lost, 12.5, '#b3303d', 1.4);
     swipeHand(c, sw, t);
     if (a >= 0) drawFlash(c, w, h, .45 - a);
   }
@@ -1265,7 +1293,7 @@
   const TUTORIAL = [
     { title: 'Swipe to cut', text: 'Swipe through a frosted pane to shatter it. Each one is a barrier: a silo, a legacy app, hidden or scattered data.', demo: demoCut },
     { title: 'Cut several at once', text: 'Cut through several panes in one swipe for a combo bonus.', demo: demoCombo },
-    { title: 'Tap the gold seals', text: 'Gold seals are trusted context: security, privacy and compliance, telling your AI whether it is safe to act. Tap one to approve it.', demo: demoTap },
+    { title: 'Tap the gold seals', text: 'Gold seals are trusted context. Each one checks a source, an owner, that data is current or that it is cleared for use, so your agent knows it is safe to act. Tap to approve.', demo: demoTap },
     { title: 'Never cut a seal', text: `Swiping through a seal is a governance breach, the hidden cost of ungoverned AI. Three breaches and your round ends. Rounds last ${DURATION} seconds.`, demo: demoBreach },
   ];
 
@@ -1274,7 +1302,8 @@
   window.addEventListener('resize', resize);
   BS.init({
     id: 'clear-cut',
-    tagline: 'Shatter the barriers between your AI and your content. Keep it governed.',
+    tagline: 'Shatter the barriers between your agent and your content. Keep it governed.',
+    score: () => score,
     onStart: start,
     tutorial: TUTORIAL,
   });

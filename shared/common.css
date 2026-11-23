@@ -177,15 +177,57 @@ input:focus { border-color: var(--accent); }
 .lb .sc { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .lb li.gap { display: block; background: none; text-align: center; padding: 0; opacity: .5; }
 
-/* ---- In-game mode pill ---- */
-.bs-mode {
-  position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 5;
-  font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
-  padding: 5px 11px; border-radius: 99px; background: var(--card); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line);
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+/* ---- In-game strip: the game's idea, then hosts · event · game · attempt, and a pause button ----
+   It stays on screen all through play so a bystander, a photo or a screenshot can tell what this is. Games keep
+   anything the player must touch above BS.SAFE_BOTTOM. */
+.bs-strip {
+  position: fixed; left: 0; right: 0; bottom: calc(9px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+  display: grid; justify-items: center; gap: 5px; padding: 0 10px;
   opacity: 0; pointer-events: none; transition: opacity .3s;
 }
-.bs-mode.show { opacity: .92; }
+.bs-strip.show { opacity: 1; }
+.bs-cap {
+  max-width: 100%; font-size: 12px; font-weight: 600; line-height: 1.25; letter-spacing: .005em; text-align: center; text-wrap: balance;
+  padding: 4px 12px 5px; border-radius: 13px; color: var(--fg); background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); /* its own plate: game objects pass underneath */
+}
+.bs-mode {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 100%; white-space: nowrap;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .01em;
+  padding: 4px 5px 4px 6px; border-radius: 99px; background: var(--card); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.bs-mode .bs-logos { gap: 3px; }
+.bs-mode .bs-lg { width: 16px; height: 16px; box-shadow: 0 0 0 1px rgba(128,128,128,.25); }
+.bs-mode .ev { opacity: .7; }
+.bs-mode .gm::before, .bs-mode #bs-att::before { content: "·"; margin-right: 7px; opacity: .45; }
+.bs-mode #bs-att { color: var(--accent); }
+#bs-pause {
+  pointer-events: auto; flex: none; width: 22px; height: 22px; margin-left: 1px; border: 0; border-radius: 50%; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px; background: var(--chip); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line);
+}
+#bs-pause i { width: 2.5px; height: 8px; border-radius: 1px; background: currentColor; opacity: .8; }
+.bs-strip:not(.show) #bs-pause { pointer-events: none; }
+@media (max-width: 379px) { .bs-mode .ev { display: none; } .bs-mode .gm::before { display: none; } } /* narrow phones: the host marks stand in for the event name */
+
+/* ---- Pause card ---- */
+.ov.pause { z-index: 9; }
+.pcap { font-family: var(--font-display); font-size: 20px; line-height: 1.3; margin: 4px 4px 0; text-wrap: balance; }
+.pstat { display: flex; justify-content: center; gap: 8px; margin: 18px 0 16px; }
+.pstat div { flex: 1; max-width: 150px; padding: 10px 12px 11px; border-radius: 14px; background: var(--chip); box-shadow: inset 0 0 0 1px var(--line); }
+.pstat b { display: block; font-family: var(--font-display); font-weight: var(--display-weight, 600); font-size: 24px; line-height: 1.05; font-variant-numeric: lining-nums tabular-nums; }
+.pstat span { display: block; font-size: 11.5px; opacity: .72; margin-top: 3px; }
+
+/* ---- Results: brand row, deck line and OpenText's line ---- */
+.ebrand { display: flex; align-items: center; justify-content: center; gap: 9px; font-size: 12px; font-weight: 600; opacity: .9; }
+.ebrand .bs-lg { width: 20px; height: 20px; }
+.ebrand .bs-logos { gap: 4px; }
+.end .kicker { margin-top: 12px; letter-spacing: .12em; }
+.end .fact { font-size: 13.5px; font-weight: 600; opacity: .9; }
+.otl { margin: 12px 2px 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13.5px; font-weight: 600; line-height: 1.35; text-wrap: balance; }
+.otl b { font-weight: 700; color: var(--accent); }
+.otl[hidden] { display: none; }
+.tidea { min-height: 17px; margin-top: 8px; font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--accent); text-wrap: balance; }
 
 @media (max-height: 700px) {
   h1 { font-size: 38px; }
@@ -224,6 +266,11 @@ input:focus { border-color: var(--accent); }
   .end .big { font-size: 96px; }
   .end .lbtitle { margin-top: 0; }
   .end .lb li { padding: 11px 14px; font-size: 15px; }
+  .bs-cap { font-size: 16px; padding: 6px 16px 7px; border-radius: 16px; }
+  .bs-mode { font-size: 12.5px; padding: 6px 7px 6px 9px; gap: 9px; }
+  .bs-mode .bs-lg { width: 20px; height: 20px; }
+  #bs-pause { width: 26px; height: 26px; }
+  .bs-strip { bottom: 16px; gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .card, .ov, .dots i, .toggle::after { transition: none; }
