@@ -4,6 +4,7 @@ A redesign of OpenText's messaging deck ("The path to the Agentic Enterprise", N
 
 - **Open it:** `presentation/index.html` (one HTML file plus `assets/`, no build step). Inter loads from Google Fonts and falls back to system fonts offline.
 - **Source material:** the deck itself and a transcript of its slides and speaker notes (`SOURCE-DIGEST.md`) are kept out of this public repo, like the other client source files. Ask the team for them.
+- **Share image and favicon:** the link preview is `og/presentation.png` (the real opening scene; regenerate it with `python3 tools/og/presentation.py`). The favicon is the site's OpenText icon in `icons/`.
 - **Search engines:** the page carries a `noindex` tag, like the rest of the site. Anyone with the link can open it, including the speaker notes (`N`).
 
 ## One presentation, with or without the reading text
