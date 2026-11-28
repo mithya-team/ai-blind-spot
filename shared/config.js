@@ -16,9 +16,10 @@ window.BS_CONFIG = {
 
   /* Prizes, shown on the leaderboard (phone, desktop and the TV). Places 1 to 3 are for the Overall leaderboard.
      img is optional: a path, or two paths for an either/or prize. Product cutouts (transparent PNG) live in prizes/.
-     Without one, a drawn icon is shown. */
+     Without one, a drawn icon is shown. note is optional small print, shown under the prize with a star on its title. */
   prizes: [
-    { place: 1, label: '1st overall', title: 'Meta Ray-Ban glasses or a TUMI backpack', icon: 'glasses', img: ['prizes/meta-rayban.png', 'prizes/tumi.png'] },
+    { place: 1, label: '1st overall', title: 'Meta Ray-Ban glasses or a TUMI backpack', icon: 'glasses', img: ['prizes/meta-rayban.png', 'prizes/tumi.png'],
+      note: 'The winner chooses either the glasses or the backpack, any model up to US$450.' },
     { place: 2, label: '2nd overall', title: 'WHOOP band with a 1-year membership', icon: 'band', img: 'prizes/whoop.png?v=2' },
     { place: 3, label: '3rd overall', title: 'LARQ self-cleaning bottle', icon: 'bottle', img: 'prizes/larq.png?v=2' },
     { place: 0, label: 'Everyone who plays', title: 'OpenText Aviator socks', icon: 'socks', img: '' },

@@ -87,6 +87,10 @@
   .pt b { display: block; font-size: 15px; font-weight: 600; line-height: 1.3; margin-top: 2px; }
   .pt em { display: block; font-style: normal; font-size: 12.5px; color: var(--dim); margin-top: 3px; }
   .pt em i { font-style: normal; color: var(--gold); font-weight: 600; }
+  /* Small print on a prize (config note), flagged with a star on its title. */
+  .pt sup { font-size: .7em; line-height: 0; vertical-align: .5em; margin-left: .1em; color: var(--halo, #8fb0ff); }
+  .pt .fine { display: block; font-size: 11.5px; line-height: 1.35; color: var(--faint); margin-top: 3px; text-wrap: pretty; }
+  .pt .fine sup { margin: 0 .15em 0 0; }
   .scan { display: none; }
 
   /* ---- Sorting (phones: a row of chips; wide screens: the column headings) ---- */
@@ -138,7 +142,7 @@
   .empty { padding: 34px 20px; text-align: center; border-radius: 20px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); color: var(--dim); font-size: 14.5px; line-height: 1.5; }
   .note { font-size: 12px; color: var(--faint); text-align: center; margin-top: 20px; line-height: 1.6; }
   /* OpenText's line, verbatim, under everything (under the prizes and QR code on wide screens and the TV). */
-  .otfoot { margin: calc(22 * var(--u)) 0 0; font-size: calc(15 * var(--u)); font-weight: 600; line-height: 1.35; letter-spacing: -.01em; text-align: center; text-wrap: balance; color: var(--fg); }
+  .otfoot { margin: calc(16 * var(--u)) 0 0; font-size: calc(15 * var(--u)); font-weight: 600; line-height: 1.35; letter-spacing: -.01em; text-align: center; text-wrap: balance; color: var(--fg); }
   .otfoot b { font-weight: 700; background: linear-gradient(90deg, #4fa3ff, #1968ff 45%, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; }
   /* A new score just landed on this row. */
   @keyframes fresh { 0%, 35% { box-shadow: inset 0 0 0 calc(2 * var(--u)) rgba(143,176,255,.95), 0 0 calc(34 * var(--u)) rgba(143,176,255,.5); filter: brightness(1.35); } 100% { filter: none; } }
@@ -161,18 +165,18 @@
     .live { font-size: calc(11 * var(--u)); padding: calc(5 * var(--u)) calc(11 * var(--u)) calc(5 * var(--u)) calc(9 * var(--u)); gap: calc(7 * var(--u)); }
     .live i { width: calc(8 * var(--u)); height: calc(8 * var(--u)); }
     .sort { display: none; }
-    .prizes { margin: 0; padding: calc(22 * var(--u)) calc(22 * var(--u)) calc(10 * var(--u)); border-radius: calc(24 * var(--u)); }
+    .prizes { margin: 0; padding: calc(18 * var(--u)) calc(22 * var(--u)) calc(6 * var(--u)); border-radius: calc(24 * var(--u)); }
     .prizes h2 { font-size: calc(11.5 * var(--u)); gap: calc(8 * var(--u)); margin: 0 calc(2 * var(--u)) calc(10 * var(--u)); }
     .prizes h2 svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
-    .prize { grid-template-columns: calc(78 * var(--u)) 1fr; gap: calc(14 * var(--u)); padding: calc(10 * var(--u)) 0; }
+    .prize { grid-template-columns: calc(78 * var(--u)) 1fr; gap: calc(14 * var(--u)); padding: calc(7 * var(--u)) 0; }
     .prize:has(.two) { grid-template-columns: calc(132 * var(--u)) 1fr; }
     .pv { width: calc(78 * var(--u)); height: calc(78 * var(--u)); border-radius: calc(16 * var(--u)); }
     .pv.two { width: calc(132 * var(--u)); gap: calc(3 * var(--u)); padding: 0 calc(7 * var(--u)); }
     .pv.two i { font-size: calc(8.5 * var(--u)); }
     .md { width: calc(22 * var(--u)); height: calc(22 * var(--u)); font-size: calc(12 * var(--u)); left: calc(-6 * var(--u)); top: calc(-6 * var(--u)); }
-    .pt small { font-size: calc(10.5 * var(--u)); } .pt b { font-size: calc(16 * var(--u)); margin-top: calc(2 * var(--u)); } .pt em { font-size: calc(13 * var(--u)); margin-top: calc(3 * var(--u)); }
-    .scan { display: grid; grid-template-columns: calc(112 * var(--u)) 1fr; gap: calc(16 * var(--u)); align-items: center; margin-top: calc(14 * var(--u)); padding: calc(14 * var(--u)); border-radius: calc(24 * var(--u)); background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
-    .scan img { width: calc(112 * var(--u)); height: calc(112 * var(--u)); padding: calc(8 * var(--u)); border-radius: calc(14 * var(--u)); background: #fff; }
+    .pt small { font-size: calc(10.5 * var(--u)); } .pt b { font-size: calc(16 * var(--u)); margin-top: calc(2 * var(--u)); } .pt em { font-size: calc(13 * var(--u)); margin-top: calc(3 * var(--u)); } .pt .fine { font-size: calc(11.5 * var(--u)); margin-top: calc(3 * var(--u)); }
+    .scan { display: grid; grid-template-columns: calc(96 * var(--u)) 1fr; gap: calc(16 * var(--u)); align-items: center; margin-top: calc(14 * var(--u)); padding: calc(14 * var(--u)); border-radius: calc(24 * var(--u)); background: var(--glass); box-shadow: inset 0 0 0 1px var(--line); }
+    .scan img { width: calc(96 * var(--u)); height: calc(96 * var(--u)); padding: calc(8 * var(--u)); border-radius: calc(14 * var(--u)); background: #fff; }
     .scan b { display: block; font-size: calc(19 * var(--u)); font-weight: 700; }
     .scan span { display: block; font-size: calc(13 * var(--u)); color: var(--dim); margin-top: calc(4 * var(--u)); line-height: 1.4; }
 
@@ -238,8 +242,8 @@
     <p class="otfoot">We Give Clients <b>Trusted Context &amp; Connected Data</b> for AI Outcomes.</p>
   </aside>
 </div>
-<script src="shared/config.js?v=22"></script>
-<script src="shared/common.js?v=22"></script>
+<script src="shared/config.js?v=23"></script>
+<script src="shared/common.js?v=23"></script>
 <script>
   const LOOK = {
     'stack-up': { acc: '#8ff0c0', short: 'Stack Up' },
@@ -279,7 +283,7 @@
       const imgs = [].concat(p.img || []).filter(Boolean);
       const vis = imgs.length ? imgs.map(src => `<img src="${BS.esc(src)}" alt="">`).join(imgs.length > 1 ? '<i>or</i>' : '') : svg(p.icon);
       return `<div class="prize${p.place > 0 ? '' : ' all'}"><div class="pv${imgs.length ? ' photo' : ''}${imgs.length > 1 ? ' two' : ''}">${vis}${p.place > 0 ? `<span class="md m${p.place}">${p.place}</span>` : ''}</div>
-        <div class="pt"><small>${BS.esc(p.label)}</small><b>${BS.esc(p.title)}</b>${lead ? `<em>${lead}</em>` : ''}</div></div>`;
+        <div class="pt"><small>${BS.esc(p.label)}</small><b>${BS.esc(p.title)}${p.note ? '<sup>*</sup>' : ''}</b>${p.note ? `<span class="fine"><sup>*</sup>${BS.esc(p.note)}</span>` : ''}${lead ? `<em>${lead}</em>` : ''}</div></div>`;
     }).join('') : '';
     for (const id of ['prizesM', 'prizesD']) document.getElementById(id).innerHTML = html;
   }

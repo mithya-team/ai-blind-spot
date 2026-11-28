@@ -247,7 +247,7 @@ All of it runs synchronously against a local store through two private functions
 Every page links `shared/common.js?v=N` and `shared/common.css?v=N`. **When you change anything in `shared/`, bump `N` in every HTML file**, or phones keep the old copy:
 
 ```bash
-sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=23"#g' *.html   # current is v=22; macOS sed, drop '' on Linux
+sed -i '' -E 's#shared/common\.(js|css)(\?v=[0-9]+)?"#shared/common.\1?v=24"#g' *.html   # current is v=23; macOS sed, drop '' on Linux
 ```
 
 ### Adding or changing a game
